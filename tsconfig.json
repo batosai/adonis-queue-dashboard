@@ -1,0 +1,19 @@
+{
+  "extends": "@adonisjs/tsconfig/tsconfig.package.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "rootDir": ".",
+    "outDir": "build",
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "index.ts",
+    "configure.ts",
+    "providers/**/*.ts",
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "bin/**/*.ts"
+  ],
+  "exclude": ["build", "node_modules"]
+}

@@ -1,0 +1,35 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dashboard
+          POSTGRES_PASSWORD: dashboard
+          POSTGRES_DB: queue_dashboard_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dashboard -d queue_dashboard_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      QUEUE_DASHBOARD_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      QUEUE_DASHBOARD_TEST_DATABASE_URL: postgres://dashboard:dashboard@127.0.0.1:5432/queue_dashboard_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run test:package

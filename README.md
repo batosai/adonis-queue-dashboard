@@ -1,0 +1,260 @@
+# @jrmc/adonis-queue-dashboard
+
+A standalone, read-only dashboard for AdonisJS 7 and `@adonisjs/queue@0.6.2`.
+It reads existing Redis or Database queue storage without an additional history database.
+Vue 3, Tailwind CSS 4, and Reka UI assets are compiled into the package: the host
+application needs no frontend framework or Vite configuration.
+
+Development version, not yet published. Internal storage readers only recognize
+the `@boringnode/queue@0.6.0` format.
+
+## Installation
+
+In this repository:
+
+```sh
+npm ci
+npm run typecheck
+npm run lint
+npm test
+npm pack
+```
+
+Install the tarball in an existing AdonisJS 7 application:
+
+```sh
+npm install /path/to/jrmc-adonis-queue-dashboard-0.1.0.tgz
+node ace configure @jrmc/adonis-queue-dashboard
+```
+
+Install and configure `@adonisjs/queue` and its driver in the host application first.
+Register the Dashboard provider **after** the Redis/Lucid and Queue providers.
+The configure hook creates `config/queue_dashboard.ts` and makes the router method
+available; it does not mount routes or create tables or connections.
+
+## Host configuration
+
+Adapter names, connections, and table names must match `config/queue.ts` exactly.
+Example `config/queue_dashboard.ts` for the Database driver:
+
+```ts
+import { defineConfig } from '@jrmc/adonis-queue-dashboard'
+
+export default defineConfig({
+  adapters: {
+    database: {
+      source: {
+        driver: 'database',
+        connectionName: 'primary',
+        tableName: 'queue_jobs',
+      },
+      queues: ['default', 'emails'],
+      allowedQueues: ['default', 'emails'],
+    },
+  },
+  pollIntervalMs: 5000,
+  maxPageSize: 50,
+})
+```
+
+### Routes and middleware
+
+In `start/routes.ts`, use the method exposed by the provider, like
+`router.attachments()` in `adonis-attachment`:
+
+```ts
+import router from '@adonisjs/core/services/router'
+import { middleware } from '#start/kernel'
+
+router.queueDashboard('/queue').use(middleware.auth())
+```
+
+The method returns a **native AdonisJS `RouteGroup`**. Its middleware apply to
+the HTML page, JSON endpoints, and assets. The host application chooses its
+authentication and authorization middleware and their options:
+
+```ts
+router.queueDashboard('/queue').use([middleware.auth(), middleware.queueAdmin()])
+```
+
+`queueAdmin` represents application middleware you must create and register in
+the kernel if you want this access policy. The package does not add access
+middleware implicitly: mounting without `.use(...)` makes the dashboard public.
+
+Parent groups also work; asset and API URLs use the actual mounted path:
+
+```ts
+router
+  .group(() => {
+    router.queueDashboard('/queues').use(middleware.auth())
+  })
+  .prefix('/admin')
+```
+
+The method is available in console environments for route listing commands.
+Dashboard readers and connections are resolved on the first authorized request,
+rather than when the provider loads.
+
+For Redis, replace `source` with
+`{ driver: 'redis', connectionName: 'main' }`. The host application's `ioredis`
+connection supplies its database and `keyPrefix`: the dashboard adds no default prefix.
+For Sync, use `{ driver: 'sync' }`; there are no persistent jobs to list.
+
+`queues` keeps configured queues visible even when they are empty.
+`allowedQueues` is an exact list of permitted names; `[]` hides all queues.
+Omitting it allows discovery in that adapter's storage.
+Redis discovers queues progressively and reports incomplete discovery. Use
+“Reload queues” to continue. SQL discovery returns at most 1,000 stored queues.
+There is no global payload search.
+
+### Sensitive data
+
+Payloads are omitted and error messages are hidden by default. To display them,
+set `redaction` at the root of `config/queue_dashboard.ts`, alongside `adapters`,
+with a policy suited to your application's secrets:
+
+```ts
+redaction: {
+  showPayload: true,
+  sensitiveKeys: ['customerPrivateData'],
+  redactText: (text) => text.replace(/Bearer\s+\S+/gi, 'Bearer [Redacted]'),
+  maxDepth: 5,
+  maxEntries: 200,
+  maxStringLength: 2000,
+}
+```
+
+This callback is an **example to customize**: a generic expression cannot identify
+all your application's secrets. Common keys such as password, token, secret,
+credentials, cookie, authorization, and their variants are redacted recursively.
+The callback processes strings and errors before serialization. The page renders
+values as escaped text.
+
+## Capabilities and limitations
+
+| Driver                  | Counts and listing           | Details                                 | Limitations                                                            |
+| ----------------------- | ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
+| Redis / Boring 0.6.0    | All states, bounded pages    | Public `getJob()` with storage overlays | Pages can change; active scans have no chronological order             |
+| Database / Boring 0.6.0 | All states, pagination by ID | Public `getJob()`                       | Targets SQLite and PostgreSQL; explicit table/connection configuration |
+| Sync                    | Unavailable                  | Unavailable                             | Immediate execution without storage                                    |
+| Unknown Boring version  | Fallback: `pending` count    | Public lookup by ID                     | Internal listing disabled                                              |
+
+The `completed` and `failed` counts describe **retained jobs**, not historical
+totals. Jobs may be deleted automatically after completion according to
+`removeOnComplete` and `removeOnFail`. The package does not change these settings.
+
+A quickly processed email job may finish and be deleted before the next refresh,
+even if its execution appears in worker logs. To view results in the dashboard,
+configure bounded retention in `config/queue.ts`, for example:
+
+```ts
+defaultJobOptions: {
+  removeOnComplete: { count: 200 },
+  removeOnFail: { count: 200 },
+},
+```
+
+For a retention period of 7 days:
+
+```ts
+defaultJobOptions: {
+  removeOnComplete: { age: '7d' },
+  removeOnFail: { age: '7d' },
+},
+```
+
+You can combine both limits with `{ age: '7d', count: 200 }`: a job is removed when
+it exceeds either limit. Cleanup happens when new jobs are finalized in the same
+queue and state; it is not an automatic expiration at an exact time.
+
+Queue or job class options can override these values. Restart workers after
+changing their configuration. Also check the selected queue, adapter, and dashboard
+connection: logs alone do not guarantee that the dashboard reads the same storage.
+An empty list does not prove that no jobs have run. Displayed attempts reflect the
+stored field, not a history of every execution.
+
+Filters cover adapter, queue, and state. Pagination follows ID order in SQL,
+sorted set order in Redis, and HSCAN traversal for active jobs.
+Pages may be partial if jobs disappear or change state. Cursors are scoped to
+the adapter, queue, and state and do not guarantee a snapshot. Job details are
+also available through a lookup by ID.
+
+Polling avoids overlapping refresh requests, pauses when the tab is hidden,
+and backs off on errors. SSE, historical telemetry, charts, administrative retries,
+deletion, and worker control remain future steps. Telemetry interfaces are defined
+in the package types; no collector is enabled in this MVP.
+
+## Demo and tests
+
+After building, start the demo application with a password supplied through
+the environment:
+
+```sh
+npm run build
+DASHBOARD_PASSWORD=demo-local npm run demo
+```
+
+Open `http://127.0.0.1:3333/admin/queues` with username `operator` and the password
+provided in `DASHBOARD_PASSWORD` (`demo-local` in this example). The demo uses the
+real Core, Lucid, and Queue providers and an isolated SQLite database in memory,
+recreated on every launch. It populates multiple states with sample data.
+Basic authentication is used for this local demo; integrate the host application's
+access policy for a real application.
+
+`npm test` runs lint, builds the package, and executes tests for SQLite, Adonis
+handlers, provider boot, security, and the Redis command contract. The two service
+tests are skipped unless these variables are set:
+
+- `QUEUE_DASHBOARD_TEST_REDIS_URL`: a test Redis instance; each run uses a unique
+  namespace and only cleans that namespace, with no `FLUSHDB`.
+- `QUEUE_DASHBOARD_TEST_DATABASE_URL`: PostgreSQL with a database named
+  `queue_dashboard_test` required; a unique temporary table is dropped after the test.
+
+These tests also check two concurrent consumers and retry hydration. They do not
+yet demonstrate a complete scenario with workers in separate processes; this
+validation must be added before claiming support for that scenario.
+
+```sh
+npx playwright install chromium
+npm run test:browser
+```
+
+Browser tests use Japa and `@japa/browser-client` in `tests/browser/`.
+`npm run test:browser` builds the package before running them.
+The scenario covers refresh without flickering, pagination, filters, details,
+keyboard dismissal, JavaScript errors, and mobile overflow using the real Adonis
+demo. Screenshots are saved in `test-results/`. The CI workflow configures Redis
+and PostgreSQL and runs the tests, browser scenario, and tarball check.
+
+`npm run test:package` installs the tarball in a separate temporary host,
+checks its exports and configure hook, and boots the providers without Vue/Vite
+in the host's dependencies. The command builds the package, performs a normal npm
+installation (including native scripts), and cleans up the temporary host.
+It requires access to the npm registry and the prerequisites for installing SQLite.
+
+## Repository structure and CI
+
+| Path                           | Purpose                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `examples/demo/app.mjs`        | Adonis application reused by the demo and integration, browser, and tarball installation tests.                                       |
+| `examples/demo/server.mjs`     | Local server started by `npm run demo`. Set `PORT` to change its port.                                                                |
+| `bin/test.ts`                  | Japa runner for the `unit`, `integration`, and `browser` suites.                                                                      |
+| `tests/`                       | Unit, integration, and browser tests.                                                                                                 |
+| `scripts/check_package.mjs`    | Generates the tarball, installs it in a temporary host, checks assets, stubs, exports, and providers, then cleans up even on failure. |
+| `.github/workflows/checks.yml` | Automatic checks on every push and pull request.                                                                                      |
+| `tsconfig.json`                | Backend configuration based on `@adonisjs/tsconfig/tsconfig.package.json`.                                                            |
+| `frontend/tsconfig.json`       | Separate configuration for Vue and Vite.                                                                                              |
+
+The build uses `tsc` for the backend, Vite for the frontend, `del-cli` to clean
+`build/`, and `copyfiles` to copy stubs. The npm package contains compiled files,
+assets, and stubs; the demo, maintenance scripts, and tests are not distributed.
+
+CI runs on Ubuntu with Node.js 24, Redis 7, and PostgreSQL 16 dedicated to tests.
+It runs, in order: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`,
+Chromium installation with its system dependencies, `npm run test:browser`, and
+`npm run test:package`. A failed step stops the job. This workflow does not
+publish to npm or deploy an application.
+
+After a build, `npm run quick:test -- unit integration` reruns only those tests
+without rebuilding the package. `npm run quick:test -- browser` runs only the
+browser suite; Chromium must be installed beforehand.

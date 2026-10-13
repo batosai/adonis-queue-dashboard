@@ -1,0 +1,122 @@
+{
+  "name": "@jrmc/adonis-queue-dashboard",
+  "version": "0.1.0",
+  "description": "A standalone, read-only queue dashboard for AdonisJS",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/batosai/adonis-queue-dashboard.git"
+  },
+  "homepage": "https://github.com/batosai/adonis-queue-dashboard#readme",
+  "bugs": {
+    "url": "https://github.com/batosai/adonis-queue-dashboard/issues"
+  },
+  "type": "module",
+  "license": "MIT",
+  "author": "Jeremy Chaufourier",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "files": [
+    "build",
+    "!build/tests",
+    "!build/bin"
+  ],
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./types": {
+      "types": "./build/src/types.d.ts",
+      "default": "./build/src/types.js"
+    },
+    "./dashboard_provider": {
+      "types": "./build/providers/dashboard_provider.d.ts",
+      "default": "./build/providers/dashboard_provider.js"
+    }
+  },
+  "scripts": {
+    "clean": "del-cli build",
+    "typecheck": "tsc --noEmit && vue-tsc --noEmit -p frontend/tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "build:backend": "tsc",
+    "build:frontend": "vite build --config frontend/vite.config.ts",
+    "build": "npm run clean && npm run build:backend && npm run build:frontend && npm run copy:templates",
+    "test": "npm run quick:test -- unit integration",
+    "test:browser": "npm run quick:test -- browser",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test",
+    "demo": "node examples/demo/server.mjs",
+    "test:package": "node scripts/check_package.mjs",
+    "copy:templates": "copyfiles \"stubs/**/*.stub\" build",
+    "quick:test": "node --import=@poppinss/ts-exec --enable-source-maps bin/test.ts",
+    "pretest": "npm run lint && npm run build",
+    "pretest:browser": "npm run build",
+    "pretest:package": "npm run build"
+  },
+  "peerDependencies": {
+    "@adonisjs/core": "^7.0.0",
+    "@adonisjs/queue": "0.6.2",
+    "@adonisjs/assembler": "^8.0.0",
+    "@adonisjs/lucid": "^22.0.0",
+    "@adonisjs/redis": "^10.0.0",
+    "knex": "^3.0.0",
+    "ioredis": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@adonisjs/assembler": {
+      "optional": true
+    },
+    "@adonisjs/lucid": {
+      "optional": true
+    },
+    "@adonisjs/redis": {
+      "optional": true
+    },
+    "knex": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@adonisjs/core": "7.6.0",
+    "@adonisjs/queue": "0.6.2",
+    "@adonisjs/assembler": "8.5.2",
+    "@adonisjs/eslint-config": "3.1.0",
+    "@boringnode/queue": "0.6.0",
+    "@japa/assert": "4.2.0",
+    "@japa/runner": "5.3.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.5",
+    "@vitejs/plugin-vue": "6.0.10",
+    "better-sqlite3": "12.11.1",
+    "eslint": "10.12.0",
+    "ioredis": "5.11.1",
+    "knex": "3.2.10",
+    "playwright": "1.60.0",
+    "prettier": "3.9.10",
+    "reka-ui": "2.10.5",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vue": "3.5.43",
+    "vue-tsc": "3.3.12",
+    "@adonisjs/http-server": "9.3.1",
+    "@adonisjs/lucid": "22.4.2",
+    "@adonisjs/redis": "10.0.2",
+    "pg": "8.23.1",
+    "copyfiles": "2.4.1",
+    "del-cli": "7.0.0",
+    "@poppinss/ts-exec": "1.5.0",
+    "@japa/browser-client": "2.3.0",
+    "@adonisjs/tsconfig": "2.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,23 @@
+{{{
+  exports({ to: app.configPath('queue_dashboard.ts') })
+}}}
+import { defineConfig } from '@jrmc/adonis-queue-dashboard'
+
+export default defineConfig({
+  pollIntervalMs: 5000,
+  // Mount explicitly in start/routes.ts:
+  // router.queueDashboard('/queue').use([middleware.auth(), middleware.queueAdmin()])
+  adapters: {
+    // Names must match config/queue.ts. Connections and table must match its driver.
+    // database: {
+    //   source: { driver: 'database', connectionName: 'primary', tableName: 'queue_jobs' },
+    //   queues: ['default'],
+    //   allowedQueues: ['default'],
+    // },
+    // redis: {
+    //   source: { driver: 'redis', connectionName: 'main' },
+    //   queues: ['default'],
+    // },
+  },
+  redaction: { showPayload: false },
+})

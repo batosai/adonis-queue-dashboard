@@ -112,7 +112,8 @@ test.group('Dashboard browser', (group) => {
       documentWidth: document.documentElement.scrollWidth,
       overflowingElements: Array.from(document.querySelectorAll('#queue-dashboard *'))
         .filter((element) => {
-          if (element.closest('.qd-table-wrap')) return false
+          // Table cells may scroll horizontally, but hidden labels must stay contained.
+          if (element.closest('.qd-table-wrap') && !element.matches('.qd-sr-only')) return false
           const rect = element.getBoundingClientRect()
           return rect.width > 0 && (rect.right > innerWidth || rect.left < 0)
         })

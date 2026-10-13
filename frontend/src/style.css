@@ -331,6 +331,8 @@
   color: inherit;
 }
 #queue-dashboard .qd-table-wrap {
+  /* Keep absolutely positioned screen-reader labels inside the scroll area. */
+  position: relative;
   overflow-x: auto;
 }
 #queue-dashboard table {

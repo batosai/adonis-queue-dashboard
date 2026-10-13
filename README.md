@@ -5,29 +5,19 @@ It reads existing Redis or Database queue storage without an additional history 
 Vue 3, Tailwind CSS 4, and Reka UI assets are compiled into the package: the host
 application needs no frontend framework or Vite configuration.
 
-Development version, not yet published. Internal storage readers only recognize
-the `@boringnode/queue@0.6.0` format.
+Internal storage readers only recognize the `@boringnode/queue@0.6.0` format.
 
 ## Installation
 
-In this repository:
+Requires Node.js 24 or later, AdonisJS 7, and `@adonisjs/queue@0.6.2`.
+Install and configure Queue and its Redis or Database driver in the host application first.
+
+Install the dashboard from npm and run its configure hook with one command:
 
 ```sh
-npm ci
-npm run typecheck
-npm run lint
-npm test
-npm pack
+node ace add @jrmc/adonis-queue-dashboard
 ```
 
-Install the tarball in an existing AdonisJS 7 application:
-
-```sh
-npm install /path/to/jrmc-adonis-queue-dashboard-0.1.0.tgz
-node ace configure @jrmc/adonis-queue-dashboard
-```
-
-Install and configure `@adonisjs/queue` and its driver in the host application first.
 Register the Dashboard provider **after** the Redis/Lucid and Queue providers.
 The configure hook creates `config/queue_dashboard.ts` and makes the router method
 available; it does not mount routes or create tables or connections.
@@ -183,6 +173,19 @@ Polling avoids overlapping refresh requests, pauses when the tab is hidden,
 and backs off on errors. SSE, historical telemetry, charts, administrative retries,
 deletion, and worker control remain future steps. Telemetry interfaces are defined
 in the package types; no collector is enabled in this MVP.
+
+## Development
+
+To work on the package from this repository:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+```
+
+`npm test` runs lint and builds the package before running the unit and integration
+tests. Use `npm pack` to build a tarball for testing in another application.
 
 ## Demo and tests
 

@@ -185,6 +185,9 @@
   align-items: center;
   margin-bottom: 26px;
 }
+#queue-dashboard .qd-title-row > div {
+  min-width: 0;
+}
 #queue-dashboard .qd-eyebrow {
   font-size: 11px;
   text-transform: uppercase;
@@ -316,9 +319,11 @@
 #queue-dashboard .qd-lookup {
   display: flex;
   gap: 8px;
+  max-width: 100%;
 }
 #queue-dashboard .qd-input {
   width: 170px;
+  min-width: 0;
   padding: 7px 11px;
   border: 1px solid #dce5df;
   border-radius: 7px;
@@ -547,6 +552,7 @@
   }
   #queue-dashboard .qd-title-row {
     align-items: start;
+    flex-wrap: wrap;
   }
   #queue-dashboard .qd-subtitle {
     max-width: 260px;
@@ -559,5 +565,10 @@
   }
   #queue-dashboard .qd-pagination {
     padding-inline: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  #queue-dashboard .qd-pagination div {
+    flex-wrap: wrap;
   }
 }

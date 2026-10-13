@@ -107,7 +107,22 @@ test.group('Dashboard browser', (group) => {
     await page.screenshot({ path: 'test-results/dashboard-desktop.png', fullPage: true })
     await page.setViewportSize({ width: 390, height: 844 })
     await page.screenshot({ path: 'test-results/dashboard-mobile.png', fullPage: true })
-    assert.isTrue(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    const mobileLayout = await page.evaluate(() => ({
+      viewportWidth: innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      overflowingElements: Array.from(document.querySelectorAll('#queue-dashboard *'))
+        .filter((element) => {
+          if (element.closest('.qd-table-wrap')) return false
+          const rect = element.getBoundingClientRect()
+          return rect.width > 0 && (rect.right > innerWidth || rect.left < 0)
+        })
+        .map((element) => ({ tag: element.tagName, className: element.className }))
+        .slice(0, 20),
+    }))
+    assert.isTrue(
+      mobileLayout.documentWidth <= mobileLayout.viewportWidth,
+      `Dashboard overflows the mobile viewport: ${JSON.stringify(mobileLayout)}`,
+    )
     assert.deepEqual(errors, [])
   })
 })

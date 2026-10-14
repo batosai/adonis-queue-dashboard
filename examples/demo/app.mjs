@@ -63,6 +63,7 @@ export async function createDemo({
       adapters: {
         database: {
           source: { driver: 'database', connectionName: 'primary' },
+          schedules: { enabled: true },
           queues: ['default', 'emails'],
           allowedQueues: ['default', 'emails'],
         },
@@ -93,9 +94,38 @@ export async function createDemo({
     const connection = db.connection('primary').getWriteClient()
     // The demo owns an isolated in-memory DB. The dashboard itself never creates tables.
     await new QueueSchemaService(connection).createJobsTable()
+    await new QueueSchemaService(connection).createSchedulesTable()
     const manager = await app.container.make('queue.manager')
     if (seed) {
       const adapter = manager.use('database')
+      await adapter.upsertSchedule({
+        id: 'daily-digest',
+        name: 'SendDigest',
+        payload: { token: 'demo-sensitive-value' },
+        cronExpression: '0 8 * * *',
+        timezone: 'Europe/Paris',
+        limit: 30,
+      })
+      await adapter.upsertSchedule({
+        id: 'paused-metrics',
+        name: 'CollectMetrics',
+        payload: null,
+        everyMs: 60000,
+        timezone: 'UTC',
+      })
+      for (let index = 0; index < 10; index++)
+        await adapter.upsertSchedule({
+          id: `metrics-${index}`,
+          name: 'CollectMetrics',
+          payload: null,
+          everyMs: (index + 1) * 60000,
+          timezone: 'UTC',
+        })
+      await adapter.updateSchedule('paused-metrics', {
+        status: 'paused',
+        lastRunAt: new Date(),
+        runCount: 3,
+      })
       for (let index = 0; index < 24; index++) {
         await adapter.pushOn('emails', {
           id: `demo-${String(index).padStart(3, '0')}`,

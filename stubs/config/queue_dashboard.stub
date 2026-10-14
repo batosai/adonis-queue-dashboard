@@ -11,6 +11,7 @@ export default defineConfig({
     // Names must match config/queue.ts. Connections and table must match its driver.
     // database: {
     //   source: { driver: 'database', connectionName: 'primary', tableName: 'queue_jobs' },
+    //   schedules: { enabled: true }, // Grants access to all schedules on this adapter.
     //   queues: ['default'],
     //   allowedQueues: ['default'],
     // },

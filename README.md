@@ -25,6 +25,10 @@ available; it does not mount routes or create tables or connections.
 ## Host configuration
 
 Adapter names, connections, and table names must match `config/queue.ts` exactly.
+The sidebar's **Adapter** selector lists the entries in `config/queue_dashboard.ts`.
+Each adapter selects its own Redis or Database connection and storage. You can
+configure several adapters of the same driver with different connections.
+The selected adapter determines which queues and schedules are displayed.
 Example `config/queue_dashboard.ts` for the Database driver:
 
 ```ts
@@ -96,6 +100,49 @@ Omitting it allows discovery in that adapter's storage.
 Redis discovers queues progressively and reports incomplete discovery. Use
 “Reload queues” to continue. SQL discovery returns at most 1,000 stored queues.
 There is no global payload search.
+
+### Schedules
+
+Schedules are disabled by default. Enable them explicitly on each dashboard adapter:
+
+```ts
+schedules: { enabled: true },
+```
+
+This grants read access to all schedules on that adapter, including lookup by ID.
+`allowedQueues` does not restrict schedules: Boring 0.6.0 stores no queue on a
+schedule. The worker resolves the queue from the job class when dispatching.
+The Schedules tab filters by adapter and active/paused status and displays cron
+or interval, timezone, next run, recorded runs, boundaries, and run limit.
+Payloads follow the same redaction policy as jobs.
+
+**Next run** shows a countdown based on the persisted `nextRunAt`, refreshed every
+second while the page is visible without additional storage requests. Hover over
+it for the exact date in the browser's local timezone; schedule details also show
+that date alongside the countdown. The schedule's timezone column describes cron
+evaluation, not the browser's display timezone.
+A missing next run displays “No next run scheduled”; a reached deadline displays
+“Due now”, then “Overdue by …”. These labels describe the stored deadline and do
+not confirm that a worker has started the job. Paused schedules can retain a next
+run date: the countdown does not mean they will dispatch while paused.
+
+For Database, set `source.schedulesTableName` when the queue adapter uses a custom
+schedules table (default: `queue_schedules`). The host must create that table using
+Queue's schema service. A missing or incompatible schedules table disables schedule
+reading without disabling jobs; the dashboard never creates or migrates tables.
+
+Redis lists IDs with SSCAN and hydrates bounded pages through public `getSchedule()`;
+SQL paginates by ID. Cursors are scoped to adapter and status. Redis pages can be
+empty after status filtering and have no chronological ordering. Continue when a
+next cursor is available. Both listings are live, so concurrent changes can cause
+duplicates or omissions. Sync has no persistent schedules. With an unsupported
+storage version, listing is unavailable; public lookup remains available when the
+adapter supports it and schedules are enabled.
+
+`runCount` and `lastRunAt` reflect schedule claims, not successful execution.
+An active schedule can have no next run after reaching its limit or end boundary.
+There is no stored link from a schedule to individual job executions in this version.
+Pause, resume, trigger, and delete are not exposed by the dashboard.
 
 ### Sensitive data
 
@@ -200,7 +247,7 @@ DASHBOARD_PASSWORD=demo-local npm run demo
 Open `http://127.0.0.1:3333/admin/queues` with username `operator` and the password
 provided in `DASHBOARD_PASSWORD` (`demo-local` in this example). The demo uses the
 real Core, Lucid, and Queue providers and an isolated SQLite database in memory,
-recreated on every launch. It populates multiple states with sample data.
+recreated on every launch. It populates multiple job states and recurring schedules with sample data.
 Basic authentication is used for this local demo; integrate the host application's
 access policy for a real application.
 

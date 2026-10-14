@@ -14,12 +14,17 @@ import type {
   RedactionConfig,
   Result,
   SafeJob,
+  SafeSchedule,
+  SchedulePage,
+  SchedulePageInput,
+  ScheduleRecord,
 } from '../types.js'
 
 export function available<T>(value: T): Result<T> {
   return { kind: 'available', value, observedAt: new Date().toISOString() }
 }
 export class PublicQueueReader implements QueueReader {
+  protected schedulesReason = 'Schedule listing requires a supported storage reader'
   protected reason?: string
   protected redactor: Redactor
   constructor(
@@ -34,12 +39,91 @@ export class PublicQueueReader implements QueueReader {
   }
   capabilities(): ReaderCapabilities {
     return {
+      ...this.scheduleCapabilities(false),
       discoverQueues: false,
       listJobs: false,
       countsByState: false,
       getJob: this.config.source.driver !== 'sync',
       reason: this.reason,
     }
+  }
+  protected scheduleCapabilities(list: boolean) {
+    const enabled = this.config.schedules?.enabled === true
+    const supported = this.config.source.driver !== 'sync' && !!this.adapter.getSchedule
+    return {
+      listSchedules: enabled && supported && list,
+      getSchedule: enabled && supported,
+      schedulesReason: !enabled
+        ? 'Schedules are disabled for this adapter'
+        : !supported
+          ? 'Adapter has no persistent schedules'
+          : !list
+            ? this.schedulesReason
+            : undefined,
+    }
+  }
+  protected assertSchedules(input?: SchedulePageInput) {
+    if (this.config.schedules?.enabled !== true)
+      throw new DashboardError(
+        403,
+        'SCHEDULES_FORBIDDEN',
+        'Schedules are disabled for this adapter',
+      )
+    if (
+      input &&
+      (!Number.isInteger(input.limit) ||
+        input.limit < 1 ||
+        input.limit > 100 ||
+        (input.status !== undefined && !['active', 'paused'].includes(input.status)))
+    )
+      throw new DashboardError(400, 'INVALID_PAGE', 'Invalid schedule status or page size')
+  }
+  async schedules(input: SchedulePageInput): Promise<Result<SchedulePage>> {
+    this.assertSchedules(input)
+    return { kind: 'unsupported', reason: this.scheduleCapabilities(false).schedulesReason! }
+  }
+  async schedule(id: string): Promise<Result<SafeSchedule | null>> {
+    this.assertSchedules()
+    if (!id || id.length > 255 || hasControlCharacters(id))
+      throw new DashboardError(400, 'INVALID_ID', 'Invalid schedule ID')
+    if (!this.scheduleCapabilities(false).getSchedule)
+      return { kind: 'unsupported', reason: this.scheduleCapabilities(false).schedulesReason! }
+    const record = await this.adapter.getSchedule!(id)
+    return available(record ? this.safeSchedule(record) : null)
+  }
+  protected safeSchedule(record: ScheduleRecord): SafeSchedule {
+    const date = (value: Date | null) =>
+      value && Number.isFinite(value.getTime()) ? value.toISOString() : null
+    return {
+      ref: { adapter: this.name, id: record.id },
+      name: record.name,
+      status: record.status,
+      cronExpression: record.cronExpression,
+      everyMs: record.everyMs,
+      timezone: record.timezone,
+      limit: record.limit,
+      runCount: record.runCount,
+      from: date(record.from),
+      to: date(record.to),
+      nextRunAt: date(record.nextRunAt),
+      lastRunAt: date(record.lastRunAt),
+      createdAt: date(record.createdAt),
+      ...(this.redactor.showPayload ? { payload: this.redactor.payload(record.payload) } : {}),
+    }
+  }
+  protected async hydrateSchedules(ids: string[], status?: SchedulePageInput['status']) {
+    const items: SafeSchedule[] = []
+    for (let start = 0; start < ids.length; start += 5) {
+      const records = await Promise.all(ids.slice(start, start + 5).map((id) => this.schedule(id)))
+      for (const record of records)
+        if (
+          record.kind === 'available' &&
+          record.value &&
+          (!status || record.value.status === status)
+        )
+          items.push(record.value)
+    }
+    return items
   }
   assertQueue(queue: string) {
     if (!queue || queue.length > 255 || hasControlCharacters(queue))

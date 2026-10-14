@@ -297,6 +297,18 @@
   align-items: center;
   flex-wrap: wrap;
 }
+#queue-dashboard .qd-schedule-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#queue-dashboard .qd-schedule-filter .qd-label {
+  margin: 0;
+}
+#queue-dashboard .qd-schedule-filter .qd-select {
+  width: auto;
+  min-width: 130px;
+}
 #queue-dashboard .qd-tabs {
   display: flex;
   gap: 4px;

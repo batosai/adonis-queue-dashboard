@@ -8,6 +8,9 @@ export interface ReaderCapabilities {
   discoverQueues: boolean
   listJobs: boolean
   countsByState: boolean
+  listSchedules: boolean
+  getSchedule: boolean
+  schedulesReason?: string
   getJob: boolean
   reason?: string
 }
@@ -31,7 +34,48 @@ export interface QueueCatalog {
   origin: 'configured' | 'discovered'
   exhaustive: boolean
 }
+export type ScheduleStatus = 'active' | 'paused'
+export interface ScheduleRecord {
+  id: string
+  name: string
+  payload: unknown
+  cronExpression: string | null
+  everyMs: number | null
+  timezone: string
+  from: Date | null
+  to: Date | null
+  limit: number | null
+  runCount: number
+  nextRunAt: Date | null
+  lastRunAt: Date | null
+  status: ScheduleStatus
+  createdAt: Date
+}
+export interface SafeSchedule extends Omit<
+  ScheduleRecord,
+  'id' | 'payload' | 'from' | 'to' | 'nextRunAt' | 'lastRunAt' | 'createdAt'
+> {
+  ref: { adapter: string; id: string }
+  from: string | null
+  to: string | null
+  nextRunAt: string | null
+  lastRunAt: string | null
+  createdAt: string | null
+  payload?: unknown
+}
+export interface SchedulePage {
+  items: SafeSchedule[]
+  nextCursor?: string
+  consistency: 'live'
+}
+export interface SchedulePageInput {
+  status?: ScheduleStatus
+  limit: number
+  cursor?: string
+}
 export interface QueueReader {
+  schedules(input: SchedulePageInput): Promise<Result<SchedulePage>>
+  schedule(id: string): Promise<Result<SafeSchedule | null>>
   capabilities(): ReaderCapabilities
   queues(): Promise<QueueCatalog>
   pendingCount(queue: string): Promise<Result<number>>
@@ -46,6 +90,7 @@ export interface QueueReader {
 }
 /** A structural public adapter contract; no dependency on Boring's private modules. */
 export interface PublicAdapter {
+  getSchedule?(id: string): Promise<ScheduleRecord | null>
   sizeOf(queue: string): Promise<number>
   getJob(
     id: string,
@@ -68,9 +113,10 @@ export interface RedactionConfig {
 }
 export type ReaderSource =
   | { driver: 'redis'; connectionName?: string }
-  | { driver: 'database'; connectionName?: string; tableName?: string }
+  | { driver: 'database'; connectionName?: string; tableName?: string; schedulesTableName?: string }
   | { driver: 'sync' }
 export interface AdapterConfig {
+  schedules?: { enabled: boolean }
   source: ReaderSource
   queues?: string[]
   /** Exact queue names; omission allows discovery. An empty array denies all queues. */

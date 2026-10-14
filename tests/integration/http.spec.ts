@@ -2,7 +2,8 @@ import { test } from '@japa/runner'
 import { HttpContextFactory, RouterFactory } from '@adonisjs/http-server/factories'
 import { Dashboard } from '../../src/dashboard.js'
 import { defineConfig } from '../../src/define_config.js'
-import { PublicQueueReader } from '../../src/readers/public_queue_reader.js'
+const { PublicQueueReader }: typeof import('../../src/readers/public_queue_reader.js') =
+  await import(new URL('../../build/src/readers/public_queue_reader.js', import.meta.url).href)
 // Exercise the compiled routes so their asset paths match the published package.
 const { registerDashboardRoutes }: typeof import('../../src/http/routes.js') = await import(
   new URL('../../build/src/http/routes.js', import.meta.url).href
@@ -85,6 +86,22 @@ test.group('Adonis route group and host middleware', () => {
     const meta = await call('/admin/queues/api/capabilities')
     assert.equal(meta.body.adapters[0].driver, 'sync')
     assert.isFalse(meta.body.adapters[0].capabilities.getJob)
+    const disabledList = await call('/admin/queues/api/schedules', '?adapter=sync')
+    assert.equal(disabledList.ctx.response.getStatus(), 403)
+    const disabledDetail = await call('/admin/queues/api/schedule', '?adapter=sync&id=one')
+    assert.equal(disabledDetail.ctx.response.getStatus(), 403)
+    const invalidScheduleStatus = await call(
+      '/admin/queues/api/schedules',
+      '?adapter=sync&status=failed',
+    )
+    assert.equal(invalidScheduleStatus.ctx.response.getStatus(), 400)
+    const invalidScheduleLimit = await call(
+      '/admin/queues/api/schedules',
+      '?adapter=sync&limit=101',
+    )
+    assert.equal(invalidScheduleLimit.ctx.response.getStatus(), 400)
+    assert.isNull(router.match('/admin/queues/api/schedules', 'POST', true))
+    assert.isNull(router.match('/admin/queues/api/schedule', 'POST', true))
     assert.isNull(router.match('/admin/queues/api/jobs', 'POST', true))
   })
   test('rejects invalid mount paths synchronously', ({ assert }) => {

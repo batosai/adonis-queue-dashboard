@@ -41,7 +41,7 @@ test('real Redis: custom prefix, retained jobs, hydration overlays and concurren
     const reader = new RedisReader(
       'redis',
       producer,
-      { source: { driver: 'redis' }, queues: ['emails'] },
+      { source: { driver: 'redis' }, queues: ['emails'], schedules: { enabled: true } },
       connection,
     )
     const counts = await reader.counts('emails')
@@ -57,6 +57,28 @@ test('real Redis: custom prefix, retained jobs, hydration overlays and concurren
     const retried = await reader.job('emails', active!.id)
     if (retried.kind === 'available') assert.equal(retried.value!.attemptsRecorded, 1)
     assert.notInclude(JSON.stringify(retried), '"hidden"')
+    for (const id of ['schedule-a', 'schedule-b', 'schedule-c'])
+      await producer.upsertSchedule({
+        id,
+        name: 'Digest',
+        payload: { token: 'hidden' },
+        everyMs: 60000,
+        timezone: 'UTC',
+      })
+    await producer.updateSchedule('schedule-b', { status: 'paused' })
+    const ids = new Set<string>()
+    let scheduleCursor: string | undefined
+    do {
+      const schedules = await reader.schedules({ limit: 1, cursor: scheduleCursor })
+      if (schedules.kind !== 'available') return assert.fail('Expected Redis schedules')
+      assert.isAtMost(schedules.value.items.length, 1)
+      schedules.value.items.forEach((item) => ids.add(item.ref.id))
+      assert.notInclude(JSON.stringify(schedules), 'payload')
+      scheduleCursor = schedules.value.nextCursor
+    } while (scheduleCursor)
+    assert.deepEqual([...ids].sort(), ['schedule-a', 'schedule-b', 'schedule-c'])
+    const paused = await reader.schedule('schedule-b')
+    if (paused.kind === 'available') assert.equal(paused.value!.status, 'paused')
   } finally {
     // Only this test's generated namespace; never FLUSHDB or global cleanup.
     let cursor = '0'
@@ -79,10 +101,20 @@ test('real PostgreSQL: current states and distinct claims from concurrent consum
     throw new Error('Use a dedicated queue_dashboard_test database')
   const connection = knex({ client: 'pg', connection: databaseUrl, pool: { min: 0, max: 4 } })
   const table = `dashboard_test_${randomUUID().replaceAll('-', '')}`
+  const schedulesTable = `${table}_schedules`
   try {
     await new QueueSchemaService(connection).createJobsTable(table)
-    const one = new KnexAdapter({ connection, tableName: table })
-    const two = new KnexAdapter({ connection, tableName: table })
+    await new QueueSchemaService(connection).createSchedulesTable(schedulesTable)
+    const one = new KnexAdapter({
+      connection,
+      tableName: table,
+      schedulesTableName: schedulesTable,
+    })
+    const two = new KnexAdapter({
+      connection,
+      tableName: table,
+      schedulesTableName: schedulesTable,
+    })
     one.setWorkerId('one')
     two.setWorkerId('two')
     for (const id of ['a', 'b', 'c'])
@@ -94,7 +126,10 @@ test('real PostgreSQL: current states and distinct claims from concurrent consum
     const reader = new DatabaseReader(
       'sql',
       one,
-      { source: { driver: 'database', tableName: table } },
+      {
+        source: { driver: 'database', tableName: table, schedulesTableName: schedulesTable },
+        schedules: { enabled: true },
+      },
       connection,
     )
     await reader.checkFormat()
@@ -103,7 +138,38 @@ test('real PostgreSQL: current states and distinct claims from concurrent consum
       assert.deepEqual(counts.value, { pending: 1, delayed: 0, active: 0, completed: 1, failed: 1 })
     const page = await reader.jobs({ queue: 'emails', state: 'failed', limit: 10 })
     if (page.kind === 'available') assert.lengthOf(page.value.items, 1)
+    for (const id of ['schedule-a', 'schedule-b'])
+      await one.upsertSchedule({
+        id,
+        name: 'Digest',
+        payload: null,
+        everyMs: 60000,
+        timezone: 'UTC',
+      })
+    await one.updateSchedule('schedule-b', { status: 'paused' })
+    await reader.checkSchedulesFormat()
+    const schedules = await reader.schedules({ limit: 1 })
+    if (schedules.kind !== 'available') return assert.fail('Expected PostgreSQL schedules')
+    assert.deepEqual(
+      schedules.value.items.map((item) => item.ref.id),
+      ['schedule-a'],
+    )
+    const next = await reader.schedules({ limit: 1, cursor: schedules.value.nextCursor })
+    if (next.kind === 'available') {
+      assert.deepEqual(
+        next.value.items.map((item) => item.ref.id),
+        ['schedule-b'],
+      )
+      assert.equal(next.value.items[0]!.status, 'paused')
+    }
+    const filtered = await reader.schedules({ status: 'paused', limit: 10 })
+    if (filtered.kind === 'available')
+      assert.deepEqual(
+        filtered.value.items.map((item) => item.ref.id),
+        ['schedule-b'],
+      )
   } finally {
+    await connection.schema.dropTableIfExists(schedulesTable)
     await connection.schema.dropTableIfExists(table)
     await connection.destroy()
   }

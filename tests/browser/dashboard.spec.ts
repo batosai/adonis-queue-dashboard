@@ -124,6 +124,42 @@ test.group('Dashboard browser', (group) => {
       mobileLayout.documentWidth <= mobileLayout.viewportWidth,
       `Dashboard overflows the mobile viewport: ${JSON.stringify(mobileLayout)}`,
     )
+    await page.getByRole('tab', { name: 'Schedules', exact: true }).click()
+    await page.getByRole('button', { name: 'View schedule daily-digest', exact: true }).waitFor()
+    assert.equal(await page.locator('tbody tr').count(), 10)
+    await page.getByRole('button', { name: 'Next →', exact: true }).click()
+    await page.getByText('Page 2 · Live data').waitFor()
+    await page.getByRole('button', { name: 'View schedule paused-metrics', exact: true }).waitFor()
+    assert.equal(await page.locator('tbody tr').count(), 2)
+    await page.getByLabel('Status', { exact: true }).selectOption('paused')
+    await page.getByText('Page 1 · Live data').waitFor()
+    await page.getByRole('button', { name: 'View schedule paused-metrics', exact: true }).waitFor()
+    assert.equal(await page.locator('tbody tr').count(), 1)
+    await page.getByRole('button', { name: 'View schedule paused-metrics', exact: true }).click()
+    await page.getByRole('dialog').waitFor()
+    await page.getByText('Payload hidden by the host.').waitFor()
+    await page.keyboard.press('Escape')
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
+    await page.getByRole('textbox', { name: 'Find schedule by ID' }).fill('unknown-schedule')
+    await page.getByRole('button', { name: 'Find', exact: true }).click()
+    await page.getByText('This schedule is no longer stored, or its ID is unknown.').waitFor()
+    await page.keyboard.press('Escape')
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
+    await page.getByLabel('Status', { exact: true }).selectOption('')
+    await page.getByRole('button', { name: 'View schedule daily-digest', exact: true }).waitFor()
+    await page.getByRole('textbox', { name: 'Find schedule by ID' }).fill('')
+    await page.evaluate(() => {
+      document.querySelector('.qd-table-wrap')!.scrollLeft = 0
+    })
+    await page.screenshot({ path: 'test-results/schedules-mobile.png', fullPage: true })
+    assert.isTrue(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      'Schedules overflow mobile viewport',
+    )
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.screenshot({ path: 'test-results/schedules-desktop.png', fullPage: true })
+    await page.getByRole('tab', { name: 'Jobs', exact: true }).click()
+    await page.getByRole('heading', { name: 'Jobs', exact: true }).waitFor()
     assert.deepEqual(errors, [])
   })
 })

@@ -21,6 +21,8 @@ export function defineConfig(config: DashboardConfig): ResolvedConfig {
     ) {
       throw new Error('Invalid dashboard adapter configuration')
     }
+    if (adapter.schedules && typeof adapter.schedules.enabled !== 'boolean')
+      throw new Error('Schedule access must be explicitly enabled or disabled')
     for (const queue of [...(adapter.queues ?? []), ...(adapter.allowedQueues ?? [])]) {
       if (!queue || queue.length > 255 || hasControlCharacters(queue)) {
         throw new Error('Invalid configured queue name')

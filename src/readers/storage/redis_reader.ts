@@ -6,6 +6,7 @@ import type {
   JobState,
   PublicAdapter,
   RedactionConfig,
+  SchedulePageInput,
 } from '../../types.js'
 import { PublicQueueReader, available } from '../public_queue_reader.js'
 import { decodeCursor, encodeCursor, cursorScope } from '../cursor.js'
@@ -28,7 +29,56 @@ export class RedisReader extends PublicQueueReader {
     this.reason = undefined
   }
   capabilities() {
-    return { discoverQueues: true, listJobs: true, countsByState: true, getJob: true }
+    return {
+      ...this.scheduleCapabilities(true),
+      discoverQueues: true,
+      listJobs: true,
+      countsByState: true,
+      getJob: true,
+    }
+  }
+  async schedules(input: SchedulePageInput) {
+    this.assertSchedules(input)
+    if (!this.capabilities().listSchedules) return super.schedules(input)
+    const type = await this.connection.type('schedules::index')
+    if (type !== 'none' && type !== 'set')
+      throw new DashboardError(
+        409,
+        'INCOMPATIBLE_STORAGE',
+        'Unexpected Redis schedules storage type',
+      )
+    const scope = JSON.stringify([this.name, 'schedules', input.status ?? null])
+    const value = decodeCursor(input.cursor, scope)
+    const scan =
+      value === undefined
+        ? { cursor: '0', offset: 0 }
+        : (value as { cursor: string; offset: number })
+    if (
+      !scan ||
+      !/^\d{1,20}$/.test(scan.cursor) ||
+      !Number.isInteger(scan.offset) ||
+      scan.offset < 0 ||
+      scan.offset > 100000
+    )
+      throw new DashboardError(400, 'INVALID_CURSOR', 'Invalid Redis schedule cursor')
+    const [cursor, batch] = await this.connection.sscan(
+      'schedules::index',
+      scan.cursor,
+      'COUNT',
+      input.limit,
+    )
+    const ids = [...new Set(batch.slice(scan.offset, scan.offset + input.limit))]
+    const nextCursor =
+      batch.length > scan.offset + input.limit
+        ? encodeCursor(scope, { cursor: scan.cursor, offset: scan.offset + input.limit })
+        : cursor !== '0'
+          ? encodeCursor(scope, { cursor, offset: 0 })
+          : undefined
+    return available({
+      items: await this.hydrateSchedules(ids, input.status),
+      nextCursor,
+      consistency: 'live' as const,
+    })
   }
   #key(queue: string, suffix: string) {
     return `jobs::${queue}::${suffix}`

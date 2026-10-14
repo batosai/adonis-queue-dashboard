@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Schedules from './Schedules.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   DialogRoot,
@@ -30,6 +31,7 @@ type Meta = {
 }
 const metadata = ref<Meta>()
 const adapter = ref('')
+const view = ref('jobs')
 const queue = ref('')
 const catalog = ref<QueueCatalog>({ names: [], origin: 'configured', exhaustive: false })
 const state = ref<JobState>('pending')
@@ -98,7 +100,7 @@ function schedule() {
     )
 }
 async function refresh() {
-  if (!adapter.value || !queue.value) return
+  if (view.value !== 'jobs' || !adapter.value || !queue.value) return
   refreshController?.abort()
   const controller = new AbortController()
   refreshController = controller
@@ -192,6 +194,10 @@ async function openJob(id: string) {
     if (!controller.signal.aborted) detailLoading.value = false
   }
 }
+function selectQueue(name: string) {
+  queue.value = name
+  view.value = 'jobs'
+}
 function nextPage() {
   if (page.value.nextCursor) {
     cursors.value = [...cursors.value, page.value.nextCursor]
@@ -202,6 +208,13 @@ function previousPage() {
   cursors.value = cursors.value.slice(0, -1)
   refresh()
 }
+watch(view, () => {
+  refreshController?.abort()
+  detailController?.abort()
+  detailOpen.value = false
+  loading.value = false
+  if (view.value === 'jobs') refresh()
+})
 watch(adapter, loadQueues)
 watch([queue, state], () => {
   detailController?.abort()
@@ -241,7 +254,7 @@ onUnmounted(() => {
         ><span class="qd-mark">Q</span><span>Queue <b>Dashboard</b></span></a
       >
       <div class="qd-sidebar-body">
-        <label class="qd-label" for="adapter">Connection</label>
+        <label class="qd-label" for="adapter">Adapter</label>
         <select id="adapter" v-model="adapter" class="qd-select">
           <option v-for="item in metadata?.adapters" :key="item.name" :value="item.name">
             {{ item.name }} · {{ item.driver }}
@@ -254,11 +267,12 @@ onUnmounted(() => {
           <button
             v-for="name in catalog.names"
             :key="name"
-            :class="['qd-queue', { 'is-active': queue === name }]"
-            :aria-current="queue === name ? 'page' : undefined"
-            @click="queue = name"
+            :class="['qd-queue', { 'is-active': view === 'jobs' && queue === name }]"
+            :aria-current="view === 'jobs' && queue === name ? 'page' : undefined"
+            @click="selectQueue(name)"
           >
-            <span class="qd-dot" />{{ name }}<span v-if="queue === name" class="qd-arrow">→</span>
+            <span class="qd-dot" />{{ name
+            }}<span v-if="view === 'jobs' && queue === name" class="qd-arrow">→</span>
           </button>
         </nav>
         <p v-if="metadata && !metadata.adapters.length" class="qd-muted">No adapters configured.</p>
@@ -282,139 +296,160 @@ onUnmounted(() => {
         ><span class="qd-badge">Read only</span>
       </header>
       <div class="qd-content">
-        <div class="qd-title-row">
-          <div>
-            <p class="qd-eyebrow">Queue overview</p>
-            <h1>{{ queue || 'Your queues' }}</h1>
-            <p class="qd-subtitle">
-              Current storage state. Completed and failed counts include retained jobs only.
-            </p>
-          </div>
-          <button
-            class="qd-button"
-            :disabled="loading || (!queue && !!metadata)"
-            @click="metadata ? refresh() : initialize()"
-          >
-            {{ loading ? 'Refreshing…' : '↻ Refresh' }}
-          </button>
-        </div>
-        <div v-if="error" class="qd-alert" role="alert">{{ error }}</div>
-        <div v-if="capability?.capabilities.reason" class="qd-notice">
-          {{ capability.capabilities.reason }}
-        </div>
-        <section class="qd-cards" aria-label="Job counts">
-          <button
-            v-for="status in statuses"
-            :key="status"
-            :class="['qd-card', `qd-${status}`, { 'is-selected': state === status }]"
-            @click="state = status"
-          >
-            <span class="qd-card-label"><span class="qd-dot" />{{ status }}</span
-            ><strong>{{ counts[status]?.toLocaleString() ?? '—' }}</strong
-            ><span class="qd-card-caption">{{
-              status === 'completed' || status === 'failed' ? 'Retained jobs' : 'Current jobs'
-            }}</span>
-          </button>
-        </section>
-        <section class="qd-jobs" aria-labelledby="jobs-title">
-          <div class="qd-jobs-heading">
-            <h2 id="jobs-title">Jobs</h2>
-            <span class="qd-muted" aria-live="polite">{{
-              updatedAt ? `Updated ${updatedAt}` : 'Waiting for data'
-            }}</span>
-          </div>
-          <div class="qd-toolbar">
-            <TabsRoot v-model="state"
-              ><TabsList class="qd-tabs" aria-label="Filter by job state"
-                ><TabsTrigger
-                  v-for="status in statuses"
-                  :key="status"
-                  :value="status"
-                  class="qd-tab"
-                  >{{ status }}</TabsTrigger
-                ></TabsList
-              ></TabsRoot
-            >
-            <form class="qd-lookup" @submit.prevent="openJob(lookupId)">
-              <input
-                v-model="lookupId"
-                class="qd-input"
-                aria-label="Find job by ID"
-                placeholder="Find job by ID"
-                maxlength="255"
-              /><button class="qd-button" :disabled="!lookupId || !queue">Find</button>
-            </form>
-          </div>
-          <div class="qd-table-wrap" :aria-busy="loading">
-            <table>
-              <thead>
-                <tr>
-                  <th>Job</th>
-                  <th>State</th>
-                  <th>Retries recorded</th>
-                  <th>Dispatched</th>
-                  <th><span class="qd-sr-only">Details</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="job in page.items" :key="job.ref.id">
-                  <td>
-                    <strong>{{ job.name }}</strong
-                    ><code>{{ job.ref.id }}</code>
-                  </td>
-                  <td>
-                    <span :class="['qd-state', `qd-${job.state}`]">{{ job.state }}</span>
-                  </td>
-                  <td>{{ job.attemptsRecorded }}</td>
-                  <td class="qd-muted">
-                    {{ job.dispatchedAt ? new Date(job.dispatchedAt).toLocaleString() : '—' }}
-                  </td>
-                  <td>
-                    <button
-                      class="qd-text-button"
-                      :aria-label="`View ${job.name} ${job.ref.id}`"
-                      @click="openJob(job.ref.id)"
-                    >
-                      View →
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="!page.items.length" class="qd-empty">
-              <span class="qd-empty-icon">≡</span>
-              <h3>
-                {{
-                  unsupported
-                    ? 'Listing unavailable'
-                    : initialLoading
-                      ? 'Loading jobs…'
-                      : `No ${state} jobs on this page`
-                }}
-              </h3>
-              <p>
-                {{
-                  unsupported ||
-                  'Only jobs still stored in this queue are visible. Completed and failed jobs require a retention policy.'
-                }}
+        <TabsRoot v-model="view"
+          ><TabsList class="qd-tabs" aria-label="Monitoring view">
+            <TabsTrigger value="jobs" class="qd-tab">Jobs</TabsTrigger>
+            <TabsTrigger value="schedules" class="qd-tab">Schedules</TabsTrigger>
+          </TabsList></TabsRoot
+        >
+        <Schedules
+          v-if="view === 'schedules' && metadata && capability"
+          :key="adapter"
+          :prefix="prefix"
+          :adapter="adapter"
+          :capabilities="capability.capabilities"
+          :poll-interval-ms="metadata.pollIntervalMs"
+          :max-page-size="metadata.maxPageSize"
+        />
+        <template v-if="view === 'jobs'">
+          <div class="qd-title-row">
+            <div>
+              <p class="qd-eyebrow">Queue overview</p>
+              <h1>{{ queue || 'Your queues' }}</h1>
+              <p class="qd-subtitle">
+                Current storage state. Completed and failed counts include retained jobs only.
               </p>
             </div>
+            <button
+              class="qd-button"
+              :disabled="loading || (!queue && !!metadata)"
+              @click="metadata ? refresh() : initialize()"
+            >
+              {{ loading ? 'Refreshing…' : '↻ Refresh' }}
+            </button>
           </div>
-          <footer class="qd-pagination">
-            <span class="qd-muted">Page {{ cursors.length }} · Live data</span>
-            <div>
-              <button
-                class="qd-button"
-                :disabled="cursors.length === 1 || loading"
-                @click="previousPage"
-              >
-                ← Previous</button
-              ><button class="qd-button" :disabled="!page.nextCursor || loading" @click="nextPage">
-                Next →
-              </button>
+          <div v-if="error" class="qd-alert" role="alert">{{ error }}</div>
+          <div v-if="capability?.capabilities.reason" class="qd-notice">
+            {{ capability.capabilities.reason }}
+          </div>
+          <section class="qd-cards" aria-label="Job counts">
+            <button
+              v-for="status in statuses"
+              :key="status"
+              :class="['qd-card', `qd-${status}`, { 'is-selected': state === status }]"
+              @click="state = status"
+            >
+              <span class="qd-card-label"><span class="qd-dot" />{{ status }}</span
+              ><strong>{{ counts[status]?.toLocaleString() ?? '—' }}</strong
+              ><span class="qd-card-caption">{{
+                status === 'completed' || status === 'failed' ? 'Retained jobs' : 'Current jobs'
+              }}</span>
+            </button>
+          </section>
+          <section class="qd-jobs" aria-labelledby="jobs-title">
+            <div class="qd-jobs-heading">
+              <h2 id="jobs-title">Jobs</h2>
+              <span class="qd-muted" aria-live="polite">{{
+                updatedAt ? `Updated ${updatedAt}` : 'Waiting for data'
+              }}</span>
             </div>
-          </footer>
-        </section>
+            <div class="qd-toolbar">
+              <TabsRoot v-model="state"
+                ><TabsList class="qd-tabs" aria-label="Filter by job state"
+                  ><TabsTrigger
+                    v-for="status in statuses"
+                    :key="status"
+                    :value="status"
+                    class="qd-tab"
+                    >{{ status }}</TabsTrigger
+                  ></TabsList
+                ></TabsRoot
+              >
+              <form class="qd-lookup" @submit.prevent="openJob(lookupId)">
+                <input
+                  v-model="lookupId"
+                  class="qd-input"
+                  aria-label="Find job by ID"
+                  placeholder="Find job by ID"
+                  maxlength="255"
+                /><button class="qd-button" :disabled="!lookupId || !queue">Find</button>
+              </form>
+            </div>
+            <div class="qd-table-wrap" :aria-busy="loading">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Job</th>
+                    <th>State</th>
+                    <th>Retries recorded</th>
+                    <th>Dispatched</th>
+                    <th><span class="qd-sr-only">Details</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="job in page.items" :key="job.ref.id">
+                    <td>
+                      <strong>{{ job.name }}</strong
+                      ><code>{{ job.ref.id }}</code>
+                    </td>
+                    <td>
+                      <span :class="['qd-state', `qd-${job.state}`]">{{ job.state }}</span>
+                    </td>
+                    <td>{{ job.attemptsRecorded }}</td>
+                    <td class="qd-muted">
+                      {{ job.dispatchedAt ? new Date(job.dispatchedAt).toLocaleString() : '—' }}
+                    </td>
+                    <td>
+                      <button
+                        class="qd-text-button"
+                        :aria-label="`View ${job.name} ${job.ref.id}`"
+                        @click="openJob(job.ref.id)"
+                      >
+                        View →
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!page.items.length" class="qd-empty">
+                <span class="qd-empty-icon">≡</span>
+                <h3>
+                  {{
+                    unsupported
+                      ? 'Listing unavailable'
+                      : initialLoading
+                        ? 'Loading jobs…'
+                        : `No ${state} jobs on this page`
+                  }}
+                </h3>
+                <p>
+                  {{
+                    unsupported ||
+                    'Only jobs still stored in this queue are visible. Completed and failed jobs require a retention policy.'
+                  }}
+                </p>
+              </div>
+            </div>
+            <footer class="qd-pagination">
+              <span class="qd-muted">Page {{ cursors.length }} · Live data</span>
+              <div>
+                <button
+                  class="qd-button"
+                  :disabled="cursors.length === 1 || loading"
+                  @click="previousPage"
+                >
+                  ← Previous</button
+                ><button
+                  class="qd-button"
+                  :disabled="!page.nextCursor || loading"
+                  @click="nextPage"
+                >
+                  Next →
+                </button>
+              </div>
+            </footer>
+          </section>
+        </template>
         <p class="qd-footnote">
           Polling every {{ (metadata?.pollIntervalMs ?? 5000) / 1000 }}s while this page is visible.
           No historical storage is required.

@@ -97,6 +97,31 @@ export function registerDashboardRoutes(
         }),
       )
       router.get(
+        '/api/schedule',
+        handler(async (ctx, dashboard) => {
+          const reader = dashboard.reader(parameter(ctx.request.input('adapter'), 'adapter'))
+          return reader.schedule(parameter(ctx.request.input('id'), 'id'))
+        }),
+      )
+      router.get(
+        '/api/schedules',
+        handler(async (ctx, dashboard) => {
+          const reader = dashboard.reader(parameter(ctx.request.input('adapter'), 'adapter'))
+          const status = ctx.request.input('status')
+          if (status !== undefined && status !== 'active' && status !== 'paused')
+            throw new DashboardError(400, 'INVALID_STATUS', 'Invalid schedule status')
+          const limit = Number(ctx.request.input('limit', dashboard.config.maxPageSize))
+          if (!Number.isInteger(limit) || limit < 1 || limit > dashboard.config.maxPageSize)
+            throw new DashboardError(400, 'INVALID_LIMIT', 'Invalid page size')
+          const cursorInput = ctx.request.input('cursor')
+          return reader.schedules({
+            status,
+            limit,
+            cursor: cursorInput === undefined ? undefined : parameter(cursorInput, 'cursor', 4096),
+          })
+        }),
+      )
+      router.get(
         '/api/jobs',
         handler(async (ctx, dashboard) => {
           const reader = dashboard.reader(parameter(ctx.request.input('adapter'), 'adapter'))

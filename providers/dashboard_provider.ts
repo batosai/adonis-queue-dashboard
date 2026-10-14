@@ -69,6 +69,7 @@ export default class DashboardProvider {
           )
           try {
             await sqlReader.checkFormat()
+            await sqlReader.checkSchedulesFormat()
             reader = sqlReader
           } catch (error) {
             const code = (error as { code?: string }).code

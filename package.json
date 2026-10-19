@@ -1,6 +1,6 @@
 {
   "name": "@jrmc/adonis-queue-dashboard",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A standalone, read-only queue dashboard for AdonisJS",
   "repository": {
     "type": "git",

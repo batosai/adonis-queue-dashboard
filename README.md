@@ -4,6 +4,8 @@ A standalone, read-only dashboard for AdonisJS 7 and `@adonisjs/queue` 0.6.2 or 
 It reads existing Redis or Database queue storage without an additional history database.
 Vue 3, Tailwind CSS 4, and Reka UI assets are compiled into the package: the host
 application needs no frontend framework or Vite configuration.
+The dashboard automatically follows the system light or dark theme, including changes
+made while it is open.
 
 Internal storage readers recognize `@boringnode/queue` 0.6.0 and 0.9.0.
 Unknown storage versions fall back to the public Queue API.

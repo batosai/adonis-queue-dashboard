@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import knex from 'knex'
 import { KnexAdapter } from '@boringnode/queue/drivers/knex_adapter'
-import { QueueSchemaService } from '@boringnode/queue'
+import { QueueSchemaService, jobLease } from '../helpers/queue.js'
 import { DatabaseReader } from '../../src/readers/storage/database_reader.js'
 
 test.group('Database reader on real SQLite storage', () => {
@@ -23,8 +23,8 @@ test.group('Database reader on real SQLite storage', () => {
         attempts: 0,
         payload: null,
       })
-      await adapter.popFrom('emails')
-      await adapter.completeJob('removed-mail', 'emails')
+      const removedJob = await adapter.popFrom('emails')
+      await adapter.completeJob(jobLease(removedJob!), 'emails')
       const removed = await reader.jobs({ queue: 'emails', state: 'completed', limit: 10 })
       if (removed.kind !== 'available') return assert.fail('Expected available listing')
       assert.isEmpty(removed.value.items)
@@ -34,8 +34,8 @@ test.group('Database reader on real SQLite storage', () => {
         attempts: 0,
         payload: null,
       })
-      await adapter.popFrom('emails')
-      await adapter.completeJob('retained-mail', 'emails', { count: 200 })
+      const retainedJob = await adapter.popFrom('emails')
+      await adapter.completeJob(jobLease(retainedJob!), 'emails', { count: 200 })
       const retained = await reader.jobs({ queue: 'emails', state: 'completed', limit: 10 })
       if (retained.kind !== 'available') return assert.fail('Expected available listing')
       assert.deepEqual(
@@ -76,9 +76,9 @@ test.group('Database reader on real SQLite storage', () => {
         payload: null,
       })
       const first = await adapter.popFrom('emails')
-      await adapter.completeJob(first!.id, 'emails', false)
+      await adapter.completeJob(jobLease(first!), 'emails', false)
       const second = await adapter.popFrom('emails')
-      await adapter.failJob(second!.id, 'emails', new Error('sensitive-password'), false)
+      await adapter.failJob(jobLease(second!), 'emails', new Error('sensitive-password'), false)
       const reader = new DatabaseReader(
         'sql',
         adapter,

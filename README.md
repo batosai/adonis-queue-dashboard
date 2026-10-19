@@ -1,17 +1,18 @@
 # @jrmc/adonis-queue-dashboard
 
-A standalone, read-only dashboard for AdonisJS 7 and `@adonisjs/queue@0.6.2`.
+A standalone, read-only dashboard for AdonisJS 7 and `@adonisjs/queue` 0.6.2 or 0.7.x.
 It reads existing Redis or Database queue storage without an additional history database.
 Vue 3, Tailwind CSS 4, and Reka UI assets are compiled into the package: the host
 application needs no frontend framework or Vite configuration.
 
-Internal storage readers only recognize the `@boringnode/queue@0.6.0` format.
+Internal storage readers recognize `@boringnode/queue` 0.6.0 and 0.9.0.
+Unknown storage versions fall back to the public Queue API.
 
 ![Queue dashboard in Mira showing the emails queue, job counts, and retained completed jobs](docs/images/dashboard-jobs.png)
 
 ## Installation
 
-Requires Node.js 24 or later, AdonisJS 7, and `@adonisjs/queue@0.6.2`.
+Requires Node.js 24 or later, AdonisJS 7, and `@adonisjs/queue` 0.6.2 or 0.7.x.
 The host application must have a working Redis or Lucid connection for the chosen driver.
 
 Install the dashboard from npm and run its configure hook with one command:
@@ -28,10 +29,21 @@ available; it does not mount routes or create tables or connections.
 
 ### Configure `@adonisjs/queue`
 
+When upgrading an existing app to Queue 0.7.0 (Boring Queue 0.9.0), stop every process running the old
+version (HTTP server, workers, and scheduler), then run the Queue storage migrations before restarting them:
+
+```sh
+node ace queue:migrate
+```
+
+Follow [Queue's upgrade instructions](https://docs.adonisjs.com/guides/digging-deeper/queues)
+for SQL schema migrations and any database timezone options. The dashboard never
+migrates storage itself. Queue 0.7.0 requires `@adonisjs/core` 7.6 or later.
+
 If Queue is not installed yet, install and configure the supported version:
 
 ```sh
-node ace add @adonisjs/queue@0.6.2
+node ace add @adonisjs/queue@0.7.0
 ```
 
 Choose the Database or Redis driver during setup. If Queue is already installed
@@ -194,7 +206,7 @@ schedules: { enabled: true },
 ```
 
 This grants read access to all schedules on that adapter, including lookup by ID.
-`allowedQueues` does not restrict schedules: Boring 0.6.0 stores no queue on a
+`allowedQueues` does not restrict schedules: Boring 0.6.0 and 0.9.0 store no queue on a
 schedule. The worker resolves the queue from the job class when dispatching.
 The Schedules tab filters by adapter and active/paused status and displays cron
 or interval, timezone, next run, recorded runs, boundaries, and run limit.
@@ -257,12 +269,12 @@ Job details in Mira, with the payload hidden by the host's redaction policy:
 
 ## Capabilities and limitations
 
-| Driver                  | Counts and listing           | Details                                 | Limitations                                                            |
-| ----------------------- | ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
-| Redis / Boring 0.6.0    | All states, bounded pages    | Public `getJob()` with storage overlays | Pages can change; active scans have no chronological order             |
-| Database / Boring 0.6.0 | All states, pagination by ID | Public `getJob()`                       | Targets SQLite and PostgreSQL; explicit table/connection configuration |
-| Sync                    | Unavailable                  | Unavailable                             | Immediate execution without storage                                    |
-| Unknown Boring version  | Fallback: `pending` count    | Public lookup by ID                     | Internal listing disabled                                              |
+| Driver                         | Counts and listing           | Details                                 | Limitations                                                            |
+| ------------------------------ | ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
+| Redis / Boring 0.6.0, 0.9.0    | All states, bounded pages    | Public `getJob()` with storage overlays | Pages can change; active scans have no chronological order             |
+| Database / Boring 0.6.0, 0.9.0 | All states, pagination by ID | Public `getJob()`                       | Targets SQLite and PostgreSQL; explicit table/connection configuration |
+| Sync                           | Unavailable                  | Unavailable                             | Immediate execution without storage                                    |
+| Unknown Boring version         | Fallback: `pending` count    | Public lookup by ID                     | Internal listing disabled                                              |
 
 The `completed` and `failed` counts describe **retained jobs**, not historical
 totals. Jobs may be deleted automatically after completion according to

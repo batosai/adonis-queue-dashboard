@@ -5,9 +5,13 @@ import {
   defineConfig as encryptionConfig,
   drivers as encryptionDrivers,
 } from '@adonisjs/core/encryption'
-import { defineConfig as queueConfig, drivers, QueueSchemaService } from '@adonisjs/queue'
+import { defineConfig as queueConfig, drivers } from '@adonisjs/queue'
+import * as queue from '@adonisjs/queue'
+import * as knexDriver from '@boringnode/queue/drivers/knex_adapter'
 import { defineConfig } from '@jrmc/adonis-queue-dashboard'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+
+const QueueSchemaService = knexDriver.KnexQueueSchemaService ?? queue.QueueSchemaService
 
 /** Real Adonis app with Lucid + Queue providers, no Vue/Vite dependency in the host. */
 export async function createDemo({
@@ -137,8 +141,14 @@ export async function createDemo({
       }
       for (let index = 0; index < 6; index++) {
         const job = await adapter.popFrom('emails')
-        if (index < 4) await adapter.completeJob(job.id, 'emails', false)
-        else await adapter.failJob(job.id, 'emails', new Error('Demo delivery error'), false)
+        if (index < 4) await adapter.completeJob(job.leaseToken ? job : job.id, 'emails', false)
+        else
+          await adapter.failJob(
+            job.leaseToken ? job : job.id,
+            'emails',
+            new Error('Demo delivery error'),
+            false,
+          )
       }
       await adapter.popFrom('emails')
       await adapter.pushLaterOn(

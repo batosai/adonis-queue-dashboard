@@ -4,7 +4,7 @@ import knex from 'knex'
 import { Redis } from 'ioredis'
 import { RedisAdapter } from '@boringnode/queue/drivers/redis_adapter'
 import { KnexAdapter } from '@boringnode/queue/drivers/knex_adapter'
-import { QueueSchemaService } from '@boringnode/queue'
+import { QueueSchemaService, jobLease } from '../helpers/queue.js'
 import { RedisReader } from '../../src/readers/storage/redis_reader.js'
 import { DatabaseReader } from '../../src/readers/storage/database_reader.js'
 
@@ -36,8 +36,8 @@ test('real Redis: custom prefix, retained jobs, hydration overlays and concurren
     )
     const [one, two] = await Promise.all([producer.popFrom('emails'), other.popFrom('emails')])
     assert.notEqual(one!.id, two!.id)
-    await producer.completeJob(one!.id, 'emails', false)
-    await other.failJob(two!.id, 'emails', new Error('sensitive'), false)
+    await producer.completeJob(jobLease(one!), 'emails', false)
+    await other.failJob(jobLease(two!), 'emails', new Error('sensitive'), false)
     const reader = new RedisReader(
       'redis',
       producer,
@@ -53,7 +53,7 @@ test('real Redis: custom prefix, retained jobs, hydration overlays and concurren
       assert.isString(listing.value.items[0]!.dispatchedAt)
     }
     const active = await producer.popFrom('emails')
-    await producer.retryJob(active!.id, 'emails')
+    await producer.retryJob(jobLease(active!), 'emails')
     const retried = await reader.job('emails', active!.id)
     if (retried.kind === 'available') assert.equal(retried.value!.attemptsRecorded, 1)
     assert.notInclude(JSON.stringify(retried), '"hidden"')
@@ -121,8 +121,8 @@ test('real PostgreSQL: current states and distinct claims from concurrent consum
       await one.pushOn('emails', { id, name: 'Job', attempts: 0, payload: null })
     const [first, second] = await Promise.all([one.popFrom('emails'), two.popFrom('emails')])
     assert.notEqual(first!.id, second!.id)
-    await one.completeJob(first!.id, 'emails', false)
-    await two.failJob(second!.id, 'emails', new Error('hidden'), false)
+    await one.completeJob(jobLease(first!), 'emails', false)
+    await two.failJob(jobLease(second!), 'emails', new Error('hidden'), false)
     const reader = new DatabaseReader(
       'sql',
       one,

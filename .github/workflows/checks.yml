@@ -3,6 +3,13 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - queue: '0.6.2'
+            boring: '0.6.0'
+          - queue: '0.7.0'
+            boring: '0.9.0'
     services:
       redis:
         image: redis:7-alpine
@@ -27,6 +34,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm install --no-save --package-lock=false @adonisjs/queue@${{ matrix.queue }} @boringnode/queue@${{ matrix.boring }}
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
@@ -35,7 +43,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dashboard-browser-screenshots
+          name: dashboard-browser-screenshots-queue-${{ matrix.queue }}
           path: test-results/
           if-no-files-found: ignore
       - run: npm run test:package

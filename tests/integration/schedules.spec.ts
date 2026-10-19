@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import knex from 'knex'
 import { KnexAdapter } from '@boringnode/queue/drivers/knex_adapter'
-import { QueueSchemaService } from '@boringnode/queue'
+import { QueueSchemaService } from '../helpers/queue.js'
 import { DatabaseReader } from '../../src/readers/storage/database_reader.js'
 
 test.group('Schedules on real SQLite storage', () => {

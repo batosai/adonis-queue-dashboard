@@ -4,7 +4,11 @@ import type { Redis } from 'ioredis'
 import type { RouteGroup } from '@adonisjs/core/http'
 import { defineConfig } from '../src/define_config.js'
 import { Dashboard } from '../src/dashboard.js'
-import { queueStorageVersion } from '../src/compatibility.js'
+import {
+  queueStorageVersion,
+  supportedQueueStorageVersions,
+  supportsQueueStorage,
+} from '../src/compatibility.js'
 import { PublicQueueReader } from '../src/readers/public_queue_reader.js'
 import { RedisReader } from '../src/readers/storage/redis_reader.js'
 import { DatabaseReader } from '../src/readers/storage/database_reader.js'
@@ -42,9 +46,9 @@ export default class DashboardProvider {
           config.redaction,
           options.source.driver === 'sync'
             ? 'Sync has no persistent jobs'
-            : `Unsupported Boring Queue version ${version}; supported: 0.6.0`,
+            : `Unsupported Boring Queue version ${version}; supported: ${supportedQueueStorageVersions.join(', ')}`,
         )
-        if (version === '0.6.0' && options.source.driver === 'redis') {
+        if (supportsQueueStorage(version) && options.source.driver === 'redis') {
           const redis = (await this.app.container.make('redis' as never)) as unknown as {
             connection(name?: string): { ioConnection: Redis }
           }
@@ -56,7 +60,7 @@ export default class DashboardProvider {
             config.redaction,
           )
         }
-        if (version === '0.6.0' && options.source.driver === 'database') {
+        if (supportsQueueStorage(version) && options.source.driver === 'database') {
           const db = (await this.app.container.make('lucid.db' as never)) as unknown as {
             connection(name?: string): { getWriteClient(): Knex }
           }

@@ -2,6 +2,8 @@ import type { DashboardConfig, ResolvedConfig } from './types.js'
 import { hasControlCharacters } from './validation.js'
 
 export function defineConfig(config: DashboardConfig): ResolvedConfig {
+  if (config.readOnly !== undefined && typeof config.readOnly !== 'boolean')
+    throw new Error('readOnly must be a boolean')
   const maxPageSize = config.maxPageSize ?? 50
   const pollIntervalMs = config.pollIntervalMs ?? 5000
   if (!Number.isInteger(maxPageSize) || maxPageSize < 1 || maxPageSize > 100) {
@@ -29,5 +31,5 @@ export function defineConfig(config: DashboardConfig): ResolvedConfig {
       }
     }
   }
-  return { ...config, maxPageSize, pollIntervalMs }
+  return { ...config, readOnly: config.readOnly ?? false, maxPageSize, pollIntervalMs }
 }

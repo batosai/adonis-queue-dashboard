@@ -2,14 +2,38 @@ import { test } from '@japa/runner'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { queueStorageVersion, supportsQueueStorage } from '../../src/compatibility.js'
+import {
+  queueStorageVersion,
+  supportsQueueStorage,
+  supportsQueueScheduleActions,
+} from '../../src/compatibility.js'
 
-test('storage readers accept audited versions and keep unknown versions on the public fallback', ({
+test('storage readers accept audited storage families and keep unknown versions on the public fallback', ({
   assert,
 }) => {
-  for (const version of ['0.6.0', '0.9.0']) assert.isTrue(supportsQueueStorage(version))
-  for (const version of ['0.6.1', '0.7.0', '0.8.0', '0.9.1', '1.0.0'])
+  for (const version of ['0.6.0', '0.9.0', '0.9.1', '0.9.12', '0.9.1+build.1'])
+    assert.isTrue(supportsQueueStorage(version))
+  for (const version of [
+    '0.6.1',
+    '0.7.0',
+    '0.8.0',
+    '0.10.0',
+    '1.0.0',
+    '0.9.1-beta.1',
+    '0.9',
+    '0.9.01',
+    '0.9.1.2',
+    '0.9.x',
+    '',
+  ])
     assert.isFalse(supportsQueueStorage(version))
+})
+
+test('schedule actions follow the supported 0.9 patch family', ({ assert }) => {
+  for (const version of ['0.9.0', '0.9.1', '0.9.12', '0.9.1+build.1'])
+    assert.isTrue(supportsQueueScheduleActions(version))
+  for (const version of ['0.6.0', '0.6.1', '0.10.0', '1.0.0', '0.9.1-beta.1', '0.9.01', ''])
+    assert.isFalse(supportsQueueScheduleActions(version))
 })
 
 test('storage version resolves from the host Queue dependency tree, including nested Boring installs', async ({
@@ -27,7 +51,7 @@ test('storage version resolves from the host Queue dependency tree, including ne
     )
     await writeFile(join(queuePath, 'index.js'), '')
     await writeFile(join(nestedPath, 'index.js'), '')
-    for (const version of ['0.6.0', '0.9.0', '1.0.0']) {
+    for (const version of ['0.6.0', '0.9.0', '0.9.1', '1.0.0']) {
       await writeFile(
         join(nestedPath, 'package.json'),
         JSON.stringify({ name: '@boringnode/queue', version, main: 'index.js' }),

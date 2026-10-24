@@ -4,6 +4,8 @@
 import { defineConfig } from '@jrmc/adonis-queue-dashboard'
 
 export default defineConfig({
+  // Set true to disable all schedule actions. Protect the route group with middleware.
+  readOnly: false,
   pollIntervalMs: 5000,
   // Mount explicitly in start/routes.ts:
   // router.queueDashboard('/queue').use([middleware.auth(), middleware.queueAdmin()])

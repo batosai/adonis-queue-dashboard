@@ -5,6 +5,7 @@ export type Counts = Record<JobState, number>
 export type Result<T> =
   { kind: 'available'; value: T; observedAt: string } | { kind: 'unsupported'; reason: string }
 export interface ReaderCapabilities {
+  scheduleActions?: boolean
   discoverQueues: boolean
   listJobs: boolean
   countsByState: boolean
@@ -122,7 +123,17 @@ export interface AdapterConfig {
   /** Exact queue names; omission allows discovery. An empty array denies all queues. */
   allowedQueues?: string[]
 }
+export type ScheduleAction = 'pause' | 'resume' | 'trigger' | 'delete'
+export interface ScheduleControls {
+  pause(): Promise<void>
+  resume(): Promise<void>
+  trigger(): Promise<void>
+  delete(): Promise<void>
+}
+export type ScheduleAccess = (id: string) => Promise<ScheduleControls | null>
 export interface DashboardConfig {
+  /** Disable all mutations. Actions are enabled by default. */
+  readOnly?: boolean
   pollIntervalMs?: number
   maxPageSize?: number
   adapters: Record<string, AdapterConfig>

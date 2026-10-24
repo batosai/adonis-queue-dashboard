@@ -385,6 +385,43 @@
   background: var(--qd-accent-soft);
   font-weight: 600;
 }
+#queue-dashboard .qd-view-tabs {
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 24px;
+  padding: 5px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  border: 1px solid var(--qd-accent-border);
+  border-radius: 12px;
+  background: var(--qd-surface);
+}
+#queue-dashboard .qd-view-tabs .qd-tab {
+  min-height: 44px;
+  min-width: 120px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  color: var(--qd-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+#queue-dashboard .qd-view-tabs .qd-tab:hover {
+  background: var(--qd-accent-soft);
+}
+#queue-dashboard .qd-view-tabs .qd-tab[data-state='active'] {
+  color: var(--qd-on-brand);
+  background: var(--qd-brand);
+}
+@media (max-width: 640px) {
+  #queue-dashboard .qd-view-tabs {
+    width: 100%;
+  }
+  #queue-dashboard .qd-view-tabs .qd-tab {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 12px;
+  }
+}
 #queue-dashboard .qd-lookup {
   display: flex;
   gap: 8px;

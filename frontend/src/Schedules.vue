@@ -9,7 +9,13 @@ import {
   DialogDescription,
   DialogClose,
 } from 'reka-ui'
-import type { ReaderCapabilities, Result, SafeSchedule, SchedulePage } from '../../src/types'
+import type {
+  ReaderCapabilities,
+  Result,
+  SafeSchedule,
+  SchedulePage,
+  ScheduleAction,
+} from '../../src/types'
 const props = defineProps<{
   prefix: string
   adapter: string
@@ -31,6 +37,9 @@ const selected = ref<SafeSchedule | null>(null)
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
+const acting = ref(false)
+const actionMessage = ref('')
+const confirmDelete = ref(false)
 const nextCursor = computed(() => page.value.nextCursor)
 let controller: AbortController | undefined
 let detailController: AbortController | undefined
@@ -119,7 +128,55 @@ async function refresh() {
     if (!current.signal.aborted) loading.value = false
   }
 }
+async function applyAction(action: ScheduleAction) {
+  if (!selected.value || acting.value) return
+  const id = selected.value.ref.id
+  acting.value = true
+  detailError.value = ''
+  actionMessage.value = ''
+  try {
+    const csrf = document.cookie
+      .split('; ')
+      .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
+      ?.slice(11)
+    const response = await fetch(
+      `${props.prefix}/api/schedule/action?${new URLSearchParams({ adapter: props.adapter, id, action })}`,
+      {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'X-Queue-Dashboard': '1',
+          ...(csrf ? { 'X-XSRF-TOKEN': decodeURIComponent(csrf) } : {}),
+        },
+      },
+    )
+    if (!response.ok)
+      throw new Error(
+        response.status === 409
+          ? 'Schedule run limit has been reached.'
+          : response.status === 404
+            ? 'This schedule no longer exists.'
+            : 'Unable to apply action. Refresh before trying again.',
+      )
+    confirmDelete.value = false
+    if (action === 'delete') {
+      selected.value = null
+      detailOpen.value = false
+    } else {
+      await openSchedule(id)
+      actionMessage.value = action === 'trigger' ? 'Job queued for execution.' : 'Schedule updated.'
+    }
+    await refresh()
+  } catch (caught) {
+    detailError.value = report(caught)
+  } finally {
+    acting.value = false
+  }
+}
 async function openSchedule(id: string) {
+  confirmDelete.value = false
+  actionMessage.value = ''
   if (!props.capabilities.getSchedule || !id) return
   detailController?.abort()
   const current = new AbortController()
@@ -357,7 +414,46 @@ onUnmounted(() => {
             ><h4>Payload</h4>
             <pre>{{ JSON.stringify(selected.payload, null, 2) }}</pre>
           </template>
-          <p v-else class="qd-muted">Payload hidden by the host.</p></template
+          <p v-else class="qd-muted">Payload hidden by the host.</p>
+          <div v-if="capabilities.scheduleActions" class="qd-schedule-actions" :aria-busy="acting">
+            <p class="qd-muted">
+              Run now queues the saved payload, even when paused. Recorded runs increase; job
+              completion is tracked separately.
+            </p>
+            <p v-if="actionMessage" role="status">{{ actionMessage }}</p>
+            <div class="qd-title-row">
+              <button
+                class="qd-button"
+                :disabled="acting"
+                @click="applyAction(selected.status === 'paused' ? 'resume' : 'pause')"
+              >
+                {{ selected.status === 'paused' ? 'Resume' : 'Pause' }}
+              </button>
+              <button
+                class="qd-button"
+                :disabled="
+                  acting || (selected.limit !== null && selected.runCount >= selected.limit)
+                "
+                @click="applyAction('trigger')"
+              >
+                Run now
+              </button>
+              <button class="qd-button" :disabled="acting" @click="confirmDelete = true">
+                Delete schedule
+              </button>
+            </div>
+            <div v-if="confirmDelete" class="qd-notice">
+              <p>
+                Delete schedule {{ selected.ref.id }} permanently? Jobs already queued will remain.
+              </p>
+              <button class="qd-button" :disabled="acting" @click="applyAction('delete')">
+                Confirm deletion
+              </button>
+              <button class="qd-button" :disabled="acting" @click="confirmDelete = false">
+                Cancel
+              </button>
+            </div>
+          </div></template
         >
       </DialogContent></DialogPortal
     ></DialogRoot

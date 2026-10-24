@@ -25,6 +25,7 @@ import type {
 
 const props = defineProps<{ prefix: string }>()
 type Meta = {
+  readOnly: boolean
   pollIntervalMs: number
   maxPageSize: number
   adapters: { name: string; driver: string; capabilities: ReaderCapabilities }[]
@@ -288,16 +289,19 @@ onUnmounted(() => {
           Reload queues
         </button>
       </div>
-      <div class="qd-sidebar-footer"><span class="qd-dot" /> Read-only monitoring</div>
+      <div class="qd-sidebar-footer">
+        <span class="qd-dot" />
+        {{ metadata?.readOnly ? 'Read-only monitoring' : 'Queue management' }}
+      </div>
     </aside>
     <main class="qd-main">
       <header class="qd-header">
         <span>MONITORING / {{ adapter || 'QUEUE' }}</span
-        ><span class="qd-badge">Read only</span>
+        ><span v-if="metadata?.readOnly" class="qd-badge">Read only</span>
       </header>
       <div class="qd-content">
         <TabsRoot v-model="view"
-          ><TabsList class="qd-tabs" aria-label="Monitoring view">
+          ><TabsList class="qd-tabs qd-view-tabs" aria-label="Monitoring view">
             <TabsTrigger value="jobs" class="qd-tab">Jobs</TabsTrigger>
             <TabsTrigger value="schedules" class="qd-tab">Schedules</TabsTrigger>
           </TabsList></TabsRoot

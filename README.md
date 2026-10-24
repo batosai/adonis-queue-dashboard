@@ -1,13 +1,15 @@
 # @jrmc/adonis-queue-dashboard
 
-A standalone, read-only dashboard for AdonisJS 7 and `@adonisjs/queue` 0.6.2 or 0.7.x.
+A standalone dashboard for AdonisJS 7 and `@adonisjs/queue` 0.6.2 or 0.7.x.
 It reads existing Redis or Database queue storage without an additional history database.
 Vue 3, Tailwind CSS 4, and Reka UI assets are compiled into the package: the host
 application needs no frontend framework or Vite configuration.
 The dashboard automatically follows the system light or dark theme, including changes
 made while it is open.
 
-Internal storage readers recognize `@boringnode/queue` 0.6.0 and 0.9.0.
+Internal storage readers recognize `@boringnode/queue` 0.6.0 and stable 0.9.x releases.
+The 0.9 storage family was audited against 0.9.0 and 0.9.1; new minor versions and
+prereleases require a separate compatibility review.
 Unknown storage versions fall back to the public Queue API.
 
 ![Queue dashboard in Mira showing the emails queue, job counts, and retained completed jobs](docs/images/dashboard-jobs.png)
@@ -208,7 +210,7 @@ schedules: { enabled: true },
 ```
 
 This grants read access to all schedules on that adapter, including lookup by ID.
-`allowedQueues` does not restrict schedules: Boring 0.6.0 and 0.9.0 store no queue on a
+`allowedQueues` does not restrict schedules: Boring 0.6.0 and 0.9.x store no queue on a
 schedule. The worker resolves the queue from the job class when dispatching.
 The Schedules tab filters by adapter and active/paused status and displays cron
 or interval, timezone, next run, recorded runs, boundaries, and run limit.
@@ -240,7 +242,27 @@ adapter supports it and schedules are enabled.
 `runCount` and `lastRunAt` reflect schedule claims, not successful execution.
 An active schedule can have no next run after reaching its limit or end boundary.
 There is no stored link from a schedule to individual job executions in this version.
-Pause, resume, trigger, and delete are not exposed by the dashboard.
+Schedule details expose **Pause**, **Resume**, **Run now**, and **Delete schedule**.
+Actions are enabled by default with `@adonisjs/queue` 0.7.x / Boring Queue 0.9.x
+for adapters with schedule access enabled. Queue 0.6.2 retains consultation access;
+its Schedule API cannot target an adapter explicitly. Unknown storage versions
+also keep actions disabled. Delete
+requires confirmation and does not remove already queued jobs. Run now uses the
+stored payload, can run a paused schedule, and respects its run limit. It queues
+a job; it does not wait for successful execution. Native Queue concurrency semantics
+apply: pausing or deleting does not cancel an execution already claimed by a worker.
+
+Protect the entire route group with authentication and authorization middleware.
+POST actions inherit the same middleware as reads. The dashboard requires a custom
+request header to prevent cross-origin form submissions; do not enable permissive
+CORS on these routes. When using Shield CSRF protection, enable its XSRF cookie
+(`enableXsrfCookie: true`); the frontend forwards it as `X-XSRF-TOKEN`.
+
+To keep an installation in consultation mode, set `readOnly: true` in
+`config/queue_dashboard.ts`. This hides action buttons and rejects mutations on the
+server. It defaults to `false`. Jobs, including failed jobs, remain read-only.
+Actions use the public Queue API and require no direct storage writes by the dashboard.
+A failed action may have partially completed; refresh before retrying.
 
 ### Sensitive data
 
@@ -273,8 +295,8 @@ Job details in Mira, with the payload hidden by the host's redaction policy:
 
 | Driver                         | Counts and listing           | Details                                 | Limitations                                                            |
 | ------------------------------ | ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
-| Redis / Boring 0.6.0, 0.9.0    | All states, bounded pages    | Public `getJob()` with storage overlays | Pages can change; active scans have no chronological order             |
-| Database / Boring 0.6.0, 0.9.0 | All states, pagination by ID | Public `getJob()`                       | Targets SQLite and PostgreSQL; explicit table/connection configuration |
+| Redis / Boring 0.6.0, 0.9.x    | All states, bounded pages    | Public `getJob()` with storage overlays | Pages can change; active scans have no chronological order             |
+| Database / Boring 0.6.0, 0.9.x | All states, pagination by ID | Public `getJob()`                       | Targets SQLite and PostgreSQL; explicit table/connection configuration |
 | Sync                           | Unavailable                  | Unavailable                             | Immediate execution without storage                                    |
 | Unknown Boring version         | Fallback: `pending` count    | Public lookup by ID                     | Internal listing disabled                                              |
 

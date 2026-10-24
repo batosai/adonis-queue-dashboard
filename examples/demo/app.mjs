@@ -18,6 +18,7 @@ export async function createDemo({
   root = new URL('../../', import.meta.url),
   password,
   seed = true,
+  readOnly = false,
   mount = true,
   environment = 'web',
 } = {}) {
@@ -63,6 +64,7 @@ export async function createDemo({
       defaultJobOptions: { removeOnComplete: false, removeOnFail: false },
     }),
     queue_dashboard: defineConfig({
+      readOnly,
       maxPageSize: 10,
       adapters: {
         database: {

@@ -1,3 +1,4 @@
+import { Schedule } from '@adonisjs/queue'
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Knex } from 'knex'
 import type { Redis } from 'ioredis'
@@ -7,13 +8,14 @@ import { Dashboard } from '../src/dashboard.js'
 import {
   queueStorageVersion,
   supportedQueueStorageVersions,
+  supportsQueueScheduleActions,
   supportsQueueStorage,
 } from '../src/compatibility.js'
 import { PublicQueueReader } from '../src/readers/public_queue_reader.js'
 import { RedisReader } from '../src/readers/storage/redis_reader.js'
 import { DatabaseReader } from '../src/readers/storage/database_reader.js'
 import { registerDashboardRoutes } from '../src/http/routes.js'
-import type { PublicAdapter, QueueReader } from '../src/types.js'
+import type { PublicAdapter, QueueReader, ScheduleAccess } from '../src/types.js'
 
 declare module '@adonisjs/core/types' {
   interface ContainerBindings {
@@ -33,9 +35,10 @@ export default class DashboardProvider {
     this.app.container.singleton('queue.dashboard', async () => {
       const config = defineConfig(this.app.config.get('queue_dashboard', { adapters: {} }))
       const manager = (await this.app.container.make('queue.manager' as never)) as unknown as {
-        use(name: string): PublicAdapter
+        use(name: string): PublicAdapter & NonNullable<ConstructorParameters<typeof Schedule>[1]>
       }
       const version = await queueStorageVersion(this.app.makePath('package.json'))
+      const controls = new Map<string, ScheduleAccess>()
       const readers = new Map<string, QueueReader>()
       for (const [name, options] of Object.entries(config.adapters)) {
         const adapter = manager.use(name)
@@ -96,9 +99,16 @@ export default class DashboardProvider {
             )
           }
         }
+        if (
+          supportsQueueScheduleActions(version) &&
+          options.source.driver !== 'sync' &&
+          options.schedules?.enabled &&
+          !config.readOnly
+        )
+          controls.set(name, (id) => Schedule.find(id, { adapter: () => adapter }))
         readers.set(name, reader)
       }
-      return new Dashboard(config, readers)
+      return new Dashboard(config, readers, controls)
     })
   }
   async boot() {

@@ -1,7 +1,7 @@
 {
   "name": "@jrmc/adonis-queue-dashboard",
-  "version": "0.3.0",
-  "description": "A standalone, read-only dashboard for @adonisjs/queue to inspect jobs and schedules across Redis and database drivers.",
+  "version": "0.4.0",
+  "description": "A standalone dashboard for @adonisjs/queue to inspect jobs and manage schedules across Redis and database drivers.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/batosai/adonis-queue-dashboard.git"

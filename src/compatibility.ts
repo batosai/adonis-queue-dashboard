@@ -2,11 +2,17 @@ import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-// Storage layouts audited against these exact Boring Queue releases.
-export const supportedQueueStorageVersions = ['0.6.0', '0.9.0'] as const
+// Storage layouts audited against 0.6.0, 0.9.0 and 0.9.1.
+// Accept stable patches of the audited 0.9 storage family, but require a new
+// audit for other minor versions and prereleases.
+export const supportedQueueStorageVersions = ['0.6.0', '0.9.x'] as const
+
+export function supportsQueueScheduleActions(version: string): boolean {
+  return /^0\.9\.(?:0|[1-9]\d*)(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.test(version)
+}
 
 export function supportsQueueStorage(version: string): boolean {
-  return supportedQueueStorageVersions.some((supported) => supported === version)
+  return version === '0.6.0' || supportsQueueScheduleActions(version)
 }
 
 /** Resolve metadata from the host's Queue dependency tree, not our dev dependency. */

@@ -7,9 +7,62 @@ import { KnexAdapter } from '@boringnode/queue/drivers/knex_adapter'
 import { QueueSchemaService, jobLease } from '../helpers/queue.js'
 import { RedisReader } from '../../src/readers/storage/redis_reader.js'
 import { DatabaseReader } from '../../src/readers/storage/database_reader.js'
+import { Schedule } from '@adonisjs/queue'
+import { Dashboard } from '../../src/dashboard.js'
+import { defineConfig } from '../../src/define_config.js'
 
 const redisUrl = process.env.QUEUE_DASHBOARD_TEST_REDIS_URL
 const databaseUrl = process.env.QUEUE_DASHBOARD_TEST_DATABASE_URL
+
+test('real Redis: native schedule actions target the selected adapter', async ({ assert }) => {
+  const { createDemo } = await import(new URL('../../examples/demo/app.mjs', import.meta.url).href)
+  const { app } = await createDemo({ password: 'redis-actions', seed: false })
+  const prefix = `queue-dashboard-actions:${randomUUID()}::`
+  const connection = new Redis(redisUrl!, { keyPrefix: prefix, maxRetriesPerRequest: 1 })
+  try {
+    const adapter = new RedisAdapter(connection)
+    await adapter.upsertSchedule({
+      id: 'actions',
+      name: 'Digest',
+      payload: { value: 42 },
+      everyMs: 60000,
+      timezone: 'UTC',
+      limit: 1,
+    })
+    const config = defineConfig({
+      adapters: { redis: { source: { driver: 'redis' }, schedules: { enabled: true } } },
+    })
+    const reader = new RedisReader('redis', adapter, config.adapters.redis!, connection)
+    const dashboard = new Dashboard(
+      config,
+      new Map([['redis', reader]]),
+      new Map([['redis', (id) => Schedule.find(id, { adapter: () => adapter })]]),
+    )
+    await dashboard.scheduleAction('redis', 'actions', 'pause')
+    const paused = await adapter.getSchedule('actions')
+    assert.equal(paused!.status, 'paused')
+    await dashboard.scheduleAction('redis', 'actions', 'trigger')
+    assert.equal(await adapter.sizeOf('default'), 1)
+    const job = await adapter.popFrom('default')
+    assert.deepEqual(job!.payload, { value: 42 })
+    const triggered = await adapter.getSchedule('actions')
+    assert.equal(triggered!.runCount, 1)
+    await assert.rejects(() => dashboard.scheduleAction('redis', 'actions', 'trigger'), /limit/)
+    await dashboard.scheduleAction('redis', 'actions', 'resume')
+    const resumed = await adapter.getSchedule('actions')
+    assert.equal(resumed!.status, 'active')
+    await dashboard.scheduleAction('redis', 'actions', 'delete')
+    assert.isNull(await adapter.getSchedule('actions'))
+    const manager = await app.container.make('queue.manager')
+    const sql = manager.use('database')
+    assert.equal(await sql.sizeOf('default'), 0)
+  } finally {
+    const keys = await connection.keys(`${prefix}*`)
+    if (keys.length) await connection.call('DEL', ...keys)
+    await connection.quit()
+    await app.terminate()
+  }
+}).skip(!redisUrl)
 
 test('real Redis: custom prefix, retained jobs, hydration overlays and concurrent consumers', async ({
   assert,

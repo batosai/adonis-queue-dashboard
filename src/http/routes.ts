@@ -96,6 +96,38 @@ export function registerDashboardRoutes(
           )
         }),
       )
+      router.post(
+        '/api/schedule/action',
+        handler(async (ctx, dashboard) => {
+          // A custom header makes cross-origin form submissions impossible. No CORS is enabled.
+          if (
+            ctx.request.header('x-queue-dashboard') !== '1' ||
+            ctx.request.header('sec-fetch-site') === 'cross-site'
+          )
+            throw new DashboardError(
+              403,
+              'INVALID_ACTION_REQUEST',
+              'Invalid dashboard action request',
+            )
+          try {
+            return await dashboard.scheduleAction(
+              parameter(ctx.request.input('adapter'), 'adapter'),
+              parameter(ctx.request.input('id'), 'id'),
+              parameter(
+                ctx.request.input('action'),
+                'action',
+              ) as import('../types.js').ScheduleAction,
+            )
+          } catch (error) {
+            if (error instanceof DashboardError) throw error
+            throw new DashboardError(
+              503,
+              'ACTION_FAILED',
+              'Unable to apply schedule action; refresh before trying again',
+            )
+          }
+        }),
+      )
       router.get(
         '/api/schedule',
         handler(async (ctx, dashboard) => {

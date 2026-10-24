@@ -162,4 +162,39 @@ test.group('Dashboard browser', (group) => {
     await page.getByRole('heading', { name: 'Jobs', exact: true }).waitFor()
     assert.deepEqual(errors, [])
   })
+  test('operator can pause, resume, trigger and confirm schedule deletion', async ({
+    browser,
+    assert,
+  }) => {
+    const context = await browser.newContext({
+      httpCredentials: { username: 'operator', password },
+    })
+    const page = await context.newPage()
+    await page.goto(`${url}/admin/queues`)
+    await page.getByRole('tab', { name: 'Schedules', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Find schedule by ID' }).fill('paused-metrics')
+    await page.getByRole('button', { name: 'Find', exact: true }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Resume', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Pause', exact: true }).waitFor()
+    await dialog.getByRole('button', { name: 'Pause', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Resume', exact: true }).waitFor()
+    await dialog.getByRole('button', { name: 'Run now', exact: true }).click()
+    await dialog.getByText('Job queued for execution.', { exact: true }).waitFor()
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.isTrue(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    await dialog.getByRole('button', { name: 'Delete schedule', exact: true }).click()
+    await page.screenshot({ path: 'test-results/dashboard-actions-mobile.png', fullPage: true })
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    assert.equal(
+      await dialog.getByRole('button', { name: 'Confirm deletion', exact: true }).count(),
+      0,
+    )
+    await dialog.getByRole('button', { name: 'Delete schedule', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Confirm deletion', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    await page.getByRole('button', { name: 'Find', exact: true }).click()
+    await page.getByText('This schedule is no longer stored, or its ID is unknown.').waitFor()
+    await context.close()
+  })
 })

@@ -10,12 +10,15 @@ test.group('Dashboard browser', (group) => {
   let http: Server
   let url: string
   let app: { terminate(): Promise<void> }
+  let supportsActions: boolean
 
   group.setup(async () => {
     const demoUrl = new URL('../../examples/demo/app.mjs', import.meta.url)
     const { createDemo } = await import(demoUrl.href)
     const demo = await createDemo({ password })
     app = demo.app
+    const dashboard = await demo.app.container.make('queue.dashboard')
+    supportsActions = dashboard.metadata().adapters[0].capabilities.scheduleActions
     http = createServer(demo.server.handle.bind(demo.server))
     try {
       await new Promise<void>((resolve, reject) => {
@@ -175,6 +178,18 @@ test.group('Dashboard browser', (group) => {
     await page.getByRole('textbox', { name: 'Find schedule by ID' }).fill('paused-metrics')
     await page.getByRole('button', { name: 'Find', exact: true }).click()
     const dialog = page.getByRole('dialog')
+    if (!supportsActions) {
+      await dialog.waitFor()
+      await dialog.getByText('Payload hidden by the host.').waitFor()
+      assert.equal(await dialog.getByRole('button', { name: 'Resume', exact: true }).count(), 0)
+      assert.equal(await dialog.getByRole('button', { name: 'Run now', exact: true }).count(), 0)
+      assert.equal(
+        await dialog.getByRole('button', { name: 'Delete schedule', exact: true }).count(),
+        0,
+      )
+      await context.close()
+      return
+    }
     await dialog.getByRole('button', { name: 'Resume', exact: true }).click()
     await dialog.getByRole('button', { name: 'Pause', exact: true }).waitFor()
     await dialog.getByRole('button', { name: 'Pause', exact: true }).click()

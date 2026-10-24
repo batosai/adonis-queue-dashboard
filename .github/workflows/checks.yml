@@ -10,6 +10,8 @@ jobs:
             boring: '0.6.0'
           - queue: '0.7.0'
             boring: '0.9.0'
+          - queue: '0.7.0'
+            boring: '0.9.1'
     services:
       redis:
         image: redis:7-alpine
@@ -43,7 +45,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dashboard-browser-screenshots-queue-${{ matrix.queue }}
+          name: dashboard-browser-screenshots-queue-${{ matrix.queue }}-boring-${{ matrix.boring }}
           path: test-results/
           if-no-files-found: ignore
       - run: npm run test:package

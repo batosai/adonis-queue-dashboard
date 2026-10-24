@@ -7,12 +7,17 @@ import { KnexAdapter } from '@boringnode/queue/drivers/knex_adapter'
 import { QueueSchemaService, jobLease } from '../helpers/queue.js'
 import { RedisReader } from '../../src/readers/storage/redis_reader.js'
 import { DatabaseReader } from '../../src/readers/storage/database_reader.js'
-import { Schedule } from '@adonisjs/queue'
+import { fileURLToPath } from 'node:url'
+import { queueStorageVersion, supportsQueueScheduleActions } from '../../src/compatibility.js'
+import { queueScheduleAccess } from '../../src/schedule_actions.js'
 import { Dashboard } from '../../src/dashboard.js'
 import { defineConfig } from '../../src/define_config.js'
 
 const redisUrl = process.env.QUEUE_DASHBOARD_TEST_REDIS_URL
 const databaseUrl = process.env.QUEUE_DASHBOARD_TEST_DATABASE_URL
+const storageVersion = await queueStorageVersion(
+  fileURLToPath(new URL('../../package.json', import.meta.url)),
+)
 
 test('real Redis: native schedule actions target the selected adapter', async ({ assert }) => {
   const { createDemo } = await import(new URL('../../examples/demo/app.mjs', import.meta.url).href)
@@ -36,7 +41,7 @@ test('real Redis: native schedule actions target the selected adapter', async ({
     const dashboard = new Dashboard(
       config,
       new Map([['redis', reader]]),
-      new Map([['redis', (id) => Schedule.find(id, { adapter: () => adapter })]]),
+      new Map([['redis', queueScheduleAccess(storageVersion, adapter)!]]),
     )
     await dashboard.scheduleAction('redis', 'actions', 'pause')
     const paused = await adapter.getSchedule('actions')
@@ -62,7 +67,7 @@ test('real Redis: native schedule actions target the selected adapter', async ({
     await connection.quit()
     await app.terminate()
   }
-}).skip(!redisUrl)
+}).skip(!redisUrl || !supportsQueueScheduleActions(storageVersion))
 
 test('real Redis: custom prefix, retained jobs, hydration overlays and concurrent consumers', async ({
   assert,

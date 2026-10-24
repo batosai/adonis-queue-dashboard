@@ -1,17 +1,25 @@
 import { test } from '@japa/runner'
 import { HttpContextFactory } from '@adonisjs/http-server/factories'
+import { fileURLToPath } from 'node:url'
+import { queueStorageVersion, supportsQueueScheduleActions } from '../../src/compatibility.js'
 
 test('schedule POST actions use native Queue API, honor limits and enforce access', async ({
   assert,
 }) => {
   const { createDemo } = await import(new URL('../../examples/demo/app.mjs', import.meta.url).href)
+  const supportsActions = supportsQueueScheduleActions(
+    await queueStorageVersion(fileURLToPath(new URL('../../package.json', import.meta.url))),
+  )
   for (const readOnly of [false, true]) {
     const { app, server } = await createDemo({ password: 'action-test', readOnly })
     try {
       const dashboard = await app.container.make('queue.dashboard')
       const manager = await app.container.make('queue.manager')
       const adapter = manager.use('database')
-      assert.equal(dashboard.metadata().adapters[0].capabilities.scheduleActions, !readOnly)
+      assert.equal(
+        dashboard.metadata().adapters[0].capabilities.scheduleActions,
+        !readOnly && supportsActions,
+      )
       const router = server.getRouter()
       const route = router
         .toJSON()
@@ -47,7 +55,7 @@ test('schedule POST actions use native Queue API, honor limits and enforce acces
       assert.equal(await call('pause', { auth: false }), 401)
       assert.equal(await call('pause', { header: false }), 403)
       assert.equal(await call('pause', { site: 'cross-site' }), 403)
-      if (readOnly) {
+      if (readOnly || !supportsActions) {
         for (const action of ['pause', 'resume', 'trigger', 'delete'])
           assert.equal(await call(action), 403)
         assert.equal(

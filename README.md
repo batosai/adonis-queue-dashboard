@@ -12,7 +12,11 @@ The 0.9 storage family was audited against 0.9.0 and 0.9.1; new minor versions a
 prereleases require a separate compatibility review.
 Unknown storage versions fall back to the public Queue API.
 
-![Queue dashboard in Mira showing the emails queue, job counts, and retained completed jobs](docs/images/dashboard-jobs.png)
+![Jobs in light mode showing the emails queue, job counts, and the jobs table](docs/images/dashboard-jobs.png)
+
+![The same Jobs view in dark mode](docs/images/dashboard-jobs-dark.png)
+
+![Schedules view showing recurring jobs, their status, and their next run](docs/images/dashboard-schedules.png)
 
 ## Installation
 
@@ -287,7 +291,7 @@ credentials, cookie, authorization, and their variants are redacted recursively.
 The callback processes strings and errors before serialization. The page renders
 values as escaped text.
 
-Job details in Mira, with the payload hidden by the host's redaction policy:
+The demo shows job details with the payload hidden by the host's redaction policy.
 
 ![Job details showing the queue, state, recorded retries, and finish time with the payload hidden](docs/images/dashboard-job-details.png)
 
